@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Pixora",
+    "slug": "pixora",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "pixora",
+    "backgroundColor": "#10151F",
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Pixora to access your photos.",
+          "savePhotosPermission": "Allow Pixora to save photos.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
+      "expo-video",
+      "expo-sharing"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.pixora.gallery",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#10151F"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

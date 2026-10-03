@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android", "web"],
+  "apple": {
+    "modules": ["PixoraEditorModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.pixoraeditor.PixoraEditorModule"]
+  }
+}
