@@ -21,7 +21,7 @@ function formatDuration(duration: number) {
 
 const PhotoThumbnail = ({ item, numColumns, source = 'gallery' }: Props) => {
   const { width } = useWindowDimensions();
-  const itemSize = (width - SPACING * (numColumns - 1)) / numColumns;
+  const itemSize = Math.max(10, (width - SPACING * (numColumns - 1)) / numColumns);
 
   return (
     <Pressable 

@@ -15,9 +15,10 @@ interface Props {
   children: React.ReactNode;
 }
 
-const { width, height } = Dimensions.get('window');
+import { useWindowDimensions } from 'react-native';
 
 export default function ZoomableView({ children }: Props) {
+  const { width, height } = useWindowDimensions();
   const { setIsZoomed, toggleControls } = useViewerStore();
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -99,7 +100,7 @@ export default function ZoomableView({ children }: Props) {
 
   return (
     <GestureDetector gesture={composed}>
-      <Animated.View style={[styles.container, animatedStyle]}>
+      <Animated.View style={[styles.container, { width, height }, animatedStyle]}>
         {children}
       </Animated.View>
     </GestureDetector>
@@ -108,8 +109,6 @@ export default function ZoomableView({ children }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    width,
-    height,
     alignItems: 'center',
     justifyContent: 'center',
   },
