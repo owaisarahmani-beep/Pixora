@@ -5,7 +5,18 @@ export function groupMediaByDate(media: PixoraMediaInfo[]): MediaGroup[] {
   const groups: Record<string, PixoraMediaInfo[]> = {};
 
   for (const item of media) {
-    const date = new Date(item.creationTime);
+    let ts = item.creationTime;
+    
+    // Fallback for corrupted EXIF data (before 1970 or after 2100)
+    if (ts < 0 || ts > 4102444800000) {
+      ts = item.modificationTime;
+    }
+    // If still corrupted, fallback to now
+    if (ts < 0 || ts > 4102444800000) {
+      ts = Date.now();
+    }
+
+    const date = new Date(ts);
     let title = '';
 
     if (isToday(date)) {
