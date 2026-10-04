@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { View, Text, StyleSheet, Dimensions, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Pressable, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { PixoraMediaInfo } from '../../services/media/mediaTypes';
@@ -11,7 +11,6 @@ interface Props {
   source?: 'gallery' | 'search' | 'favorites' | 'album';
 }
 
-const { width } = Dimensions.get('window');
 const SPACING = 2;
 
 function formatDuration(duration: number) {
@@ -21,6 +20,7 @@ function formatDuration(duration: number) {
 }
 
 const PhotoThumbnail = ({ item, numColumns, source = 'gallery' }: Props) => {
+  const { width } = useWindowDimensions();
   const itemSize = (width - SPACING * (numColumns - 1)) / numColumns;
 
   return (
