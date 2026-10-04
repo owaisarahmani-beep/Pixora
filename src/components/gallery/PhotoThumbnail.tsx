@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { View, Text, StyleSheet, Dimensions, Pressable } from 'react-native';
-import { Link } from 'expo-router';
+import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { PixoraMediaInfo } from '../../services/media/mediaTypes';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,24 +24,25 @@ const PhotoThumbnail = ({ item, numColumns, source = 'gallery' }: Props) => {
   const itemSize = (width - SPACING * (numColumns - 1)) / numColumns;
 
   return (
-    <Link href={{ pathname: `/viewer/[id]`, params: { id: item.id, source } }} asChild>
-      <Pressable style={[styles.container, { width: itemSize, height: itemSize, marginBottom: SPACING, marginRight: SPACING }]}>
-        <Image
-          style={styles.image}
-          source={{ uri: item.uri }}
-          contentFit="cover"
-          transition={200}
-          cachePolicy="disk"
-        />
-        
-        {item.mediaType === 'video' && (
-          <View style={styles.videoBadge}>
-            <Ionicons name="play" size={12} color="#FFFFFF" />
-            <Text style={styles.durationText}>{formatDuration(item.duration)}</Text>
-          </View>
-        )}
-      </Pressable>
-    </Link>
+    <Pressable 
+      style={[styles.container, { width: itemSize, height: itemSize, marginBottom: SPACING, marginRight: SPACING }]}
+      onPress={() => router.push({ pathname: `/viewer/[id]`, params: { id: item.id, source } })}
+    >
+      <Image
+        style={styles.image}
+        source={{ uri: item.uri }}
+        contentFit="cover"
+        transition={200}
+        cachePolicy="disk"
+      />
+      
+      {item.mediaType === 'video' && (
+        <View style={styles.videoBadge}>
+          <Ionicons name="play" size={12} color="#FFFFFF" />
+          <Text style={styles.durationText}>{formatDuration(item.duration)}</Text>
+        </View>
+      )}
+    </Pressable>
   );
 };
 
