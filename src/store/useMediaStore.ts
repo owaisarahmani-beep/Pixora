@@ -17,6 +17,7 @@ interface MediaState {
   loadInitialMedia: () => Promise<void>;
   loadMoreMedia: () => Promise<void>;
   refreshMedia: () => Promise<void>;
+  deleteMediaAsync: (id: string) => Promise<boolean>;
 }
 
 export const useMediaStore = create<MediaState>((set, get) => ({
@@ -120,8 +121,27 @@ export const useMediaStore = create<MediaState>((set, get) => ({
       }
       set({ isRefreshing: false });
     } catch (error) {
-      console.error('Failed to refresh media', error);
       set({ isRefreshing: false });
     }
   },
+
+  deleteMediaAsync: async (id: string) => {
+    try {
+      // Need to import MediaLibrary at top if we use it directly, but mediaStoreService has no delete method?
+      // Wait, let's just use MediaLibrary directly.
+      const MediaLibrary = require('expo-media-library');
+      await MediaLibrary.deleteAssetsAsync([id]);
+      
+      const { media } = get();
+      const updatedMedia = media.filter(m => m.id !== id);
+      set({ 
+        media: updatedMedia,
+        groupedMedia: groupMediaByDate(updatedMedia)
+      });
+      return true;
+    } catch (e) {
+      console.error('Delete failed', e);
+      return false;
+    }
+  }
 }));

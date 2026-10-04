@@ -47,11 +47,19 @@ export default function ZoomableView({ children }: Props) {
     });
 
   const pan = Gesture.Pan()
-    .maxPointers(1)
     .onUpdate((event) => {
       if (scale.value > 1) {
-        translateX.value = savedTranslateX.value + event.translationX;
-        translateY.value = savedTranslateY.value + event.translationY;
+        const maxTx = (width * scale.value - width) / 2;
+        const maxTy = (height * scale.value - height) / 2;
+        
+        let newTx = savedTranslateX.value + event.translationX;
+        let newTy = savedTranslateY.value + event.translationY;
+        
+        newTx = Math.max(-maxTx, Math.min(newTx, maxTx));
+        newTy = Math.max(-maxTy, Math.min(newTy, maxTy));
+        
+        translateX.value = newTx;
+        translateY.value = newTy;
       }
     })
     .onEnd(() => {
@@ -85,10 +93,8 @@ export default function ZoomableView({ children }: Props) {
 
   const taps = Gesture.Exclusive(doubleTap, singleTap);
 
-  const composed = Gesture.Simultaneous(
-    Gesture.Exclusive(taps, pan),
-    pinch
-  );
+  // Pan and pinch can happen simultaneously, and taps can happen alongside them.
+  const composed = Gesture.Simultaneous(Gesture.Simultaneous(pinch, pan), taps);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [

@@ -26,7 +26,7 @@ class PixoraEditorModule : Module() {
       
       // 1. Decode Original Bitmap
       val inputStream = context.contentResolver.openInputStream(uri) ?: throw Exception("Could not open input stream")
-      val originalBitmap = BitmapFactory.decodeStream(inputStream)
+      val originalBitmap = BitmapFactory.decodeStream(inputStream) ?: throw Exception("Failed to decode image. Format may be unsupported or it is not a valid image.")
       inputStream.close()
 
       // 2. Handle EXIF Rotation from original

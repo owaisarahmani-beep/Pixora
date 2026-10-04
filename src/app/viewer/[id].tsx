@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, TouchableWithoutFeedback } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import PagerView from 'react-native-pager-view';
 import { Image } from 'expo-image';
@@ -126,14 +126,18 @@ const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolea
     }
   }, [isActive, player]);
 
+  const toggleControls = useViewerStore(state => state.toggleControls);
+  
   return (
-    <View style={[styles.page, { paddingBottom: 80, paddingTop: 60 }]}>
-      <VideoView
-        style={styles.media}
-        player={player}
-        nativeControls
-      />
-    </View>
+    <TouchableWithoutFeedback onPress={toggleControls}>
+      <View style={[styles.page, { paddingBottom: 80, paddingTop: 60 }]}>
+        <VideoView
+          style={styles.media}
+          player={player}
+          nativeControls
+        />
+      </View>
+    </TouchableWithoutFeedback>
   );
 };
 

@@ -54,14 +54,16 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
       </View>
     );
   };
+  
+  const AnyFlashList = FlashList as any;
 
   return (
-    <FlashList
+    <AnyFlashList
       data={data}
       estimatedItemSize={100}
       renderItem={renderItem}
-      keyExtractor={(item) => item.type === 'header' ? `header-${item.title}` : `row-${item.items[0].id}`}
-      getItemType={(item) => item.type}
+      keyExtractor={(item: ListItem) => item.type === 'header' ? `header-${item.title}` : `row-${item.items[0].id}`}
+      getItemType={(item: ListItem) => item.type}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.5}
       refreshing={isRefreshing}
