@@ -8,11 +8,11 @@ export function groupMediaByDate(media: PixoraMediaInfo[]): MediaGroup[] {
     let ts = item.creationTime;
     
     // Fallback for corrupted EXIF data (before 1970 or after 2100)
-    if (ts < 0 || ts > 4102444800000) {
+    if (ts <= 0 || ts > 4102444800000) {
       ts = item.modificationTime;
     }
     // If still corrupted, fallback to now
-    if (ts < 0 || ts > 4102444800000) {
+    if (ts <= 0 || ts > 4102444800000) {
       ts = Date.now();
     }
 

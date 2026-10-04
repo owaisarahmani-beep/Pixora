@@ -127,7 +127,7 @@ const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolea
   }, [isActive, player]);
 
   return (
-    <View style={styles.page}>
+    <View style={[styles.page, { paddingBottom: 80, paddingTop: 60 }]}>
       <VideoView
         style={styles.media}
         player={player}
