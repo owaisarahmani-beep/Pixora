@@ -8,6 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PixoraMediaInfo } from '../../services/media/mediaTypes';
 import { useViewerStore } from '../../store/useViewerStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
+import { useMediaStore } from '../../store/useMediaStore';
+import { Alert } from 'react-native';
 
 interface Props {
   item: PixoraMediaInfo;
@@ -21,8 +23,29 @@ export default function ViewerControls({ item }: Props) {
   const insets = useSafeAreaInsets();
   const { controlsVisible, setDetailsVisible } = useViewerStore();
   const { favorites, toggleFavorite } = useFavoritesStore();
+  const { deleteMediaAsync } = useMediaStore();
   
   const opacity = useSharedValue(1);
+
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Photo",
+      "Are you sure you want to permanently delete this item?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: async () => {
+            const success = await deleteMediaAsync(item.id);
+            if (success) {
+              router.back();
+            }
+          }
+        }
+      ]
+    );
+  };
 
   useEffect(() => {
     opacity.value = withTiming(controlsVisible ? 1 : 0, { duration: 200 });
@@ -30,7 +53,6 @@ export default function ViewerControls({ item }: Props) {
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
-    pointerEvents: controlsVisible ? 'auto' : 'none',
   }));
 
   const handleShare = async () => {
@@ -46,13 +68,13 @@ export default function ViewerControls({ item }: Props) {
   const isFavorite = favorites.has(item.id);
 
   return (
-    <Animated.View style={[styles.container, animatedStyle]}>
+    <Animated.View style={[styles.container, animatedStyle]} pointerEvents={controlsVisible ? 'box-none' : 'none'}>
       {/* Top Bar */}
       <View style={[styles.topBar, { paddingTop: insets.top || 20 }]}>
         <Pressable onPress={() => router.back()} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </Pressable>
-        <Text style={styles.title}>{item.filename}</Text>
+        <Text style={styles.title}></Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -78,6 +100,11 @@ export default function ViewerControls({ item }: Props) {
         <Pressable onPress={() => setDetailsVisible(true)} style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Details">
           <Ionicons name="information-circle-outline" size={24} color="#FFF" />
           <Text style={styles.actionText}>Details</Text>
+        </Pressable>
+
+        <Pressable onPress={handleDelete} style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Delete">
+          <Ionicons name="trash-outline" size={24} color="#EF4444" />
+          <Text style={styles.actionText}>Delete</Text>
         </Pressable>
       </View>
     </Animated.View>
