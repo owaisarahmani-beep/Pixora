@@ -12,11 +12,12 @@ class AppLockService {
    */
   async checkCapabilityAsync(): Promise<AppLockCapability> {
     try {
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
       const securityLevel = await LocalAuthentication.getEnrolledLevelAsync();
       
       // We consider authentication available if they have at least a SECRET (PIN/Pattern) or Biometric
-      const isAvailable = isEnrolled && securityLevel >= LocalAuthentication.SecurityLevel.SECRET;
+      // isEnrolledAsync only strictly checks biometrics, so we use securityLevel to allow PIN-only devices
+      const isAvailable = securityLevel >= LocalAuthentication.SecurityLevel.SECRET;
       
       return { isAvailable, securityLevel };
     } catch (e: any) {

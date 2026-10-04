@@ -58,6 +58,7 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
   return (
     <FlashList
       data={data}
+      estimatedItemSize={100}
       renderItem={renderItem}
       keyExtractor={(item) => item.type === 'header' ? `header-${item.title}` : `row-${item.items[0].id}`}
       getItemType={(item) => item.type}

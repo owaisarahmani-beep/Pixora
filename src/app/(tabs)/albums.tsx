@@ -6,7 +6,7 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { useAlbumsStore } from '../../store/useAlbumsStore';
 import { useMediaStore } from '../../store/useMediaStore';
 import { useVisibleAlbums } from '../../hooks/useVisibleMedia';
-import { Link } from 'expo-router';
+import { router } from 'expo-router';
 import { Image } from 'expo-image';
 
 export default function AlbumsScreen() {
@@ -28,31 +28,32 @@ export default function AlbumsScreen() {
     const coverUri = albumCovers[item.id];
     
     return (
-      <Link href={`/album/${item.id}`} asChild>
-        <Pressable style={[styles.albumCard, { backgroundColor: theme.surface }]}>
-          <View style={[styles.albumIcon, { backgroundColor: theme.background }]}>
-            {coverUri ? (
-              <Image 
-                source={coverUri}
-                style={styles.coverImage}
-                contentFit="cover"
-                transition={200}
-              />
-            ) : (
-              <Ionicons name="folder" size={32} color={theme.accent} />
-            )}
-          </View>
-          <View style={styles.albumInfo}>
-            <Text style={[styles.albumTitle, { color: theme.text }]} numberOfLines={1}>
-              {item.title}
-            </Text>
-            <Text style={[styles.albumCount, { color: theme.textMuted }]}>
-              {item.assetCount} items
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
-        </Pressable>
-      </Link>
+      <Pressable 
+        style={[styles.albumCard, { backgroundColor: theme.surface }]}
+        onPress={() => router.push(`/album/${item.id}`)}
+      >
+        <View style={[styles.albumIcon, { backgroundColor: theme.background }]}>
+          {coverUri ? (
+            <Image 
+              source={{ uri: coverUri }}
+              style={styles.coverImage}
+              contentFit="cover"
+              transition={200}
+            />
+          ) : (
+            <Ionicons name="folder" size={32} color={theme.accent} />
+          )}
+        </View>
+        <View style={styles.albumInfo}>
+          <Text style={[styles.albumTitle, { color: theme.text }]} numberOfLines={1}>
+            {item.title}
+          </Text>
+          <Text style={[styles.albumCount, { color: theme.textMuted }]}>
+            {item.assetCount} items
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
+      </Pressable>
     );
   };
 
@@ -76,10 +77,7 @@ export default function AlbumsScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>Albums</Text>
-      </View>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
 
       {isLoadingAlbums && albums.length === 0 ? (
         <View style={styles.centerState}>
