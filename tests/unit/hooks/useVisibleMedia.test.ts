@@ -14,7 +14,7 @@ describe('Visibility Filters', () => {
       { id: '3', albumId: null },
     ];
     
-    const result = filterHiddenMedia(mockMedia, ['hidden-1']);
+    const result = filterHiddenMedia(mockMedia, ['hidden-1'], []);
     
     expect(result.length).toBe(2);
     expect(result.map(m => m.id)).toEqual(['1', '3']);
@@ -32,13 +32,26 @@ describe('Visibility Filters', () => {
     expect(result[0].id).toBe('public-1');
   });
 
-  it('preserves array reference if there are no hidden albums', () => {
+  it('preserves array reference if there are no hidden albums or assets', () => {
     const mockMedia: any[] = [
       { id: '1', albumId: 'public-1' },
     ];
     
-    const result = filterHiddenMedia(mockMedia, []);
+    const result = filterHiddenMedia(mockMedia, [], []);
     
     expect(result).toBe(mockMedia);
+  });
+
+  it('filters out individually hidden assets', () => {
+    const mockMedia: any[] = [
+      { id: '1', albumId: 'public-1' },
+      { id: '2', albumId: 'public-1' },
+      { id: '3', albumId: null },
+    ];
+    
+    const result = filterHiddenMedia(mockMedia, [], ['2']);
+    
+    expect(result.length).toBe(2);
+    expect(result.map(m => m.id)).toEqual(['1', '3']);
   });
 });

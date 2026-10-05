@@ -9,6 +9,7 @@ import { PixoraMediaInfo } from '../../services/media/mediaTypes';
 import { useViewerStore } from '../../store/useViewerStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useMediaStore } from '../../store/useMediaStore';
+import { usePrivacyStore } from '../../store/usePrivacyStore';
 import { Alert } from 'react-native';
 
 interface Props {
@@ -74,39 +75,68 @@ export default function ViewerControls({ item }: Props) {
         <Pressable onPress={() => router.back()} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Go back">
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </Pressable>
-        <Text style={styles.title}></Text>
-        <View style={styles.placeholder} />
+
+        {item.mediaType === 'video' && (
+          <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
+            <Pressable onPress={handleShare} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Share">
+              <Ionicons name="share-outline" size={24} color="#FFF" />
+            </Pressable>
+            <Pressable onPress={() => toggleFavorite(item.id, item)} style={styles.iconButton} accessibilityRole="button" accessibilityLabel={isFavorite ? "Unfavorite" : "Favorite"}>
+              <Ionicons name={isFavorite ? "heart" : "heart-outline"} size={24} color={isFavorite ? "#EF4444" : "#FFF"} />
+            </Pressable>
+            <Pressable onPress={() => setDetailsVisible(true)} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Details">
+              <Ionicons name="information-circle-outline" size={24} color="#FFF" />
+            </Pressable>
+            <Pressable onPress={async () => {
+              await usePrivacyStore.getState().hideAssets([item.id]);
+              router.back();
+            }} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Hide">
+              <Ionicons name="eye-off-outline" size={24} color="#FFF" />
+            </Pressable>
+            <Pressable onPress={handleDelete} style={styles.iconButton} accessibilityRole="button" accessibilityLabel="Delete">
+              <Ionicons name="trash-outline" size={24} color="#EF4444" />
+            </Pressable>
+          </View>
+        )}
       </View>
 
-      {/* Bottom Bar */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom || 20 }]}>
-        {item.mediaType === 'photo' && (
+      {/* Bottom Bar (Photos only) */}
+      {item.mediaType === 'photo' && (
+        <View style={[styles.bottomBar, { paddingBottom: insets.bottom || 20 }]}>
           <Pressable onPress={() => router.push({ pathname: '/editor/[id]', params: { id: item.id, source } })} style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Edit">
             <Ionicons name="color-wand-outline" size={24} color="#FFF" />
             <Text style={styles.actionText}>Edit</Text>
           </Pressable>
-        )}
 
-        <Pressable onPress={handleShare} style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Share">
-          <Ionicons name="share-outline" size={24} color="#FFF" />
-          <Text style={styles.actionText}>Share</Text>
-        </Pressable>
+          <Pressable onPress={handleShare} style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Share">
+            <Ionicons name="share-outline" size={24} color="#FFF" />
+            <Text style={styles.actionText}>Share</Text>
+          </Pressable>
 
-        <Pressable onPress={() => toggleFavorite(item.id, item)} style={styles.actionButton} accessibilityRole="button" accessibilityLabel={isFavorite ? "Unfavorite" : "Favorite"}>
-          <Ionicons name={isFavorite ? "heart" : "heart-outline"} size={24} color={isFavorite ? "#EF4444" : "#FFF"} />
-          <Text style={styles.actionText}>Favorite</Text>
-        </Pressable>
+          <Pressable onPress={() => toggleFavorite(item.id, item)} style={styles.actionButton} accessibilityRole="button" accessibilityLabel={isFavorite ? "Unfavorite" : "Favorite"}>
+            <Ionicons name={isFavorite ? "heart" : "heart-outline"} size={24} color={isFavorite ? "#EF4444" : "#FFF"} />
+            <Text style={styles.actionText}>Favorite</Text>
+          </Pressable>
 
-        <Pressable onPress={() => setDetailsVisible(true)} style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Details">
-          <Ionicons name="information-circle-outline" size={24} color="#FFF" />
-          <Text style={styles.actionText}>Details</Text>
-        </Pressable>
+          <Pressable onPress={() => setDetailsVisible(true)} style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Details">
+            <Ionicons name="information-circle-outline" size={24} color="#FFF" />
+            <Text style={styles.actionText}>Details</Text>
+          </Pressable>
 
-        <Pressable onPress={handleDelete} style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Delete">
-          <Ionicons name="trash-outline" size={24} color="#EF4444" />
-          <Text style={styles.actionText}>Delete</Text>
-        </Pressable>
-      </View>
+          <Pressable onPress={async () => {
+            await usePrivacyStore.getState().hideAssets([item.id]);
+            router.back();
+          }} style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Hide">
+            <Ionicons name="eye-off-outline" size={24} color="#FFF" />
+            <Text style={styles.actionText}>Hide</Text>
+          </Pressable>
+
+          <Pressable onPress={handleDelete} style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Delete">
+            <Ionicons name="trash-outline" size={24} color="#EF4444" />
+            <Text style={styles.actionText}>Delete</Text>
+          </Pressable>
+        </View>
+      )}
     </Animated.View>
   );
 }

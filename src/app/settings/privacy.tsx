@@ -55,23 +55,18 @@ export default function PrivacySettingsScreen() {
           </View>
         </View>
 
-        {/* Hidden Albums Section */}
+        {/* Hidden Media Section */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.accent }]}>Hidden Albums</Text>
+          <Text style={[styles.sectionTitle, { color: theme.accent }]}>Hidden Media</Text>
           <Text style={[styles.description, { color: theme.textMuted }]}>
-            Albums hidden here will not appear in the normal Pixora gallery, search, or favorites.
+            Photos and albums hidden here will not appear in the normal Pixora gallery, search, or favorites.
             The files are NOT encrypted or hidden from other apps.
           </Text>
           
-          <Link href="/settings/hidden-albums" asChild>
+          <Link href="/settings/hidden-media" asChild>
             <Pressable style={[styles.linkRow, { backgroundColor: theme.surface }]}>
-              <Text style={[styles.rowTitle, { color: theme.text }]}>Manage Hidden Albums</Text>
+              <Text style={[styles.rowTitle, { color: theme.text }]}>Manage Hidden Media</Text>
               <View style={styles.badgeContainer}>
-                {hiddenAlbumIds.length > 0 && (
-                  <View style={[styles.badge, { backgroundColor: theme.accent }]}>
-                    <Text style={styles.badgeText}>{hiddenAlbumIds.length}</Text>
-                  </View>
-                )}
                 <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
               </View>
             </Pressable>

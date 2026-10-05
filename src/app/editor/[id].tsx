@@ -168,7 +168,8 @@ export default function EditorScreen() {
   if (item.mediaType === 'video') {
     return (
       <View style={[styles.center, { backgroundColor: theme.background }]}>
-        <Text style={[styles.errorText, { color: theme.text }]}>Video editing is not supported. Stage 4C is photo editing only.</Text>
+        <Ionicons name="videocam-off-outline" size={64} color={theme.textMuted} style={{ marginBottom: 16 }} />
+        <Text style={[styles.errorText, { color: theme.text }]}>Video editing is not currently supported.</Text>
         <Pressable onPress={() => router.back()} style={{ padding: 16, backgroundColor: theme.surface, borderRadius: 8 }}>
           <Text style={{ color: theme.accent }}>Go Back</Text>
         </Pressable>

@@ -16,6 +16,7 @@
     "expo-linking": "~57.0.11",
     "expo-local-authentication": "~57.0.3",
     "expo-media-library": "~57.0.5",
+    "expo-navigation-bar": "~57.0.3",
     "expo-router": "~57.0.24",
     "expo-screen-orientation": "~57.0.2",
     "expo-sharing": "~57.0.22",

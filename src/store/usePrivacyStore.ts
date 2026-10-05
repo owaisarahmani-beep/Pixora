@@ -8,6 +8,7 @@ interface PrivacyState {
   isAppLockEnabled: boolean;
   lockPolicy: LockPolicy;
   hiddenAlbumIds: string[];
+  hiddenAssetIds: string[];
   
   // Ephemeral state
   isUnlocked: boolean;
@@ -27,9 +28,14 @@ interface PrivacyState {
   // Hidden Albums
   hideAlbum: (albumId: string) => Promise<void>;
   unhideAlbum: (albumId: string) => Promise<void>;
+
+  // Hidden Assets
+  hideAssets: (assetIds: string[]) => Promise<void>;
+  unhideAssets: (assetIds: string[]) => Promise<void>;
   
   // Visibility Selectors
   isHidden: (albumId: string | undefined | null) => boolean;
+  isAssetHidden: (assetId: string) => boolean;
 }
 
 const PRIVACY_STORE_KEY = '@pixora_privacy_store_v1';
@@ -38,6 +44,7 @@ export const usePrivacyStore = create<PrivacyState>((set, get) => ({
   isAppLockEnabled: false,
   lockPolicy: 'immediate',
   hiddenAlbumIds: [],
+  hiddenAssetIds: [],
   
   isUnlocked: false,
   isCapabilityChecked: false,
@@ -51,6 +58,7 @@ export const usePrivacyStore = create<PrivacyState>((set, get) => ({
       let isAppLockEnabled = false;
       let lockPolicy: LockPolicy = 'immediate';
       let hiddenAlbumIds: string[] = [];
+      let hiddenAssetIds: string[] = [];
 
       if (storedStr) {
         const parsed = JSON.parse(storedStr);
@@ -58,12 +66,14 @@ export const usePrivacyStore = create<PrivacyState>((set, get) => ({
         isAppLockEnabled = capability.isAvailable ? Boolean(parsed.isAppLockEnabled) : false;
         lockPolicy = parsed.lockPolicy === 'inactivity' ? 'inactivity' : 'immediate';
         hiddenAlbumIds = Array.isArray(parsed.hiddenAlbumIds) ? parsed.hiddenAlbumIds : [];
+        hiddenAssetIds = Array.isArray(parsed.hiddenAssetIds) ? parsed.hiddenAssetIds : [];
       }
 
       set({
         isAppLockEnabled,
         lockPolicy,
         hiddenAlbumIds,
+        hiddenAssetIds,
         isSupportedOnDevice: capability.isAvailable,
         isCapabilityChecked: true,
         // If app lock is not enabled, we consider the app intrinsically "unlocked"
@@ -131,9 +141,28 @@ export const usePrivacyStore = create<PrivacyState>((set, get) => ({
     await savePrivacyState(get());
   },
 
+  hideAssets: async (assetIds: string[]) => {
+    const state = get();
+    const newIds = assetIds.filter(id => !state.hiddenAssetIds.includes(id));
+    if (newIds.length > 0) {
+      set({ hiddenAssetIds: [...state.hiddenAssetIds, ...newIds] });
+      await savePrivacyState(get());
+    }
+  },
+
+  unhideAssets: async (assetIds: string[]) => {
+    const state = get();
+    set({ hiddenAssetIds: state.hiddenAssetIds.filter(id => !assetIds.includes(id)) });
+    await savePrivacyState(get());
+  },
+
   isHidden: (albumId: string | undefined | null) => {
     if (!albumId) return false;
     return get().hiddenAlbumIds.includes(albumId);
+  },
+
+  isAssetHidden: (assetId: string) => {
+    return get().hiddenAssetIds.includes(assetId);
   }
 }));
 
@@ -143,6 +172,7 @@ async function savePrivacyState(state: PrivacyState) {
       isAppLockEnabled: state.isAppLockEnabled,
       lockPolicy: state.lockPolicy,
       hiddenAlbumIds: state.hiddenAlbumIds,
+      hiddenAssetIds: state.hiddenAssetIds,
     };
     await AsyncStorage.setItem(PRIVACY_STORE_KEY, JSON.stringify(data));
   } catch (e) {

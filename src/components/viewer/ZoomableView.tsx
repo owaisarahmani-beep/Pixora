@@ -19,7 +19,7 @@ import { useWindowDimensions } from 'react-native';
 
 export default function ZoomableView({ children }: Props) {
   const { width, height } = useWindowDimensions();
-  const { setIsZoomed, toggleControls } = useViewerStore();
+  const { isZoomed, setIsZoomed, toggleControls } = useViewerStore();
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -47,6 +47,7 @@ export default function ZoomableView({ children }: Props) {
     });
 
   const pan = Gesture.Pan()
+    .enabled(isZoomed)
     .onUpdate((event) => {
       if (scale.value > 1) {
         const maxTx = (width * scale.value - width) / 2;

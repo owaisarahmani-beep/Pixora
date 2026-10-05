@@ -65,7 +65,7 @@ class PixoraEditorModule : Module() {
       if (flipX) matrix.postScale(-1f, 1f, currentBitmap.width / 2f, currentBitmap.height / 2f)
       if (flipY) matrix.postScale(1f, -1f, currentBitmap.width / 2f, currentBitmap.height / 2f)
 
-      val rotate = (options["rotation"] as? Double)?.toFloat() ?: 0f
+      val rotate = (options["rotation"] as? Number)?.toFloat() ?: 0f
       if (rotate != 0f) {
         matrix.postRotate(rotate, currentBitmap.width / 2f, currentBitmap.height / 2f)
       }
@@ -84,10 +84,10 @@ class PixoraEditorModule : Module() {
       // Expecting normalized coordinates (0.0 to 1.0) relative to the visible transformed image
       val crop = options["crop"] as? Map<*, *>
       if (crop != null) {
-        val normX = (crop["originX"] as? Double)?.toFloat() ?: 0f
-        val normY = (crop["originY"] as? Double)?.toFloat() ?: 0f
-        val normW = (crop["width"] as? Double)?.toFloat() ?: 1f
-        val normH = (crop["height"] as? Double)?.toFloat() ?: 1f
+        val normX = (crop["originX"] as? Number)?.toFloat() ?: 0f
+        val normY = (crop["originY"] as? Number)?.toFloat() ?: 0f
+        val normW = (crop["width"] as? Number)?.toFloat() ?: 1f
+        val normH = (crop["height"] as? Number)?.toFloat() ?: 1f
 
         var cropX = (normX * transformedBitmap.width).toInt()
         var cropY = (normY * transformedBitmap.height).toInt()
@@ -108,10 +108,10 @@ class PixoraEditorModule : Module() {
       }
 
       // 5. Apply Color Matrix (Brightness, Contrast, Saturation, Warmth, Filter)
-      val brightness = (options["brightness"] as? Double)?.toFloat() ?: 0f
-      val contrast = (options["contrast"] as? Double)?.toFloat() ?: 1f
-      val saturation = (options["saturation"] as? Double)?.toFloat() ?: 1f
-      val warmth = (options["warmth"] as? Double)?.toFloat() ?: 0f
+      val brightness = (options["brightness"] as? Number)?.toFloat() ?: 0f
+      val contrast = (options["contrast"] as? Number)?.toFloat() ?: 1f
+      val saturation = (options["saturation"] as? Number)?.toFloat() ?: 1f
+      val warmth = (options["warmth"] as? Number)?.toFloat() ?: 0f
       val filter = options["filter"] as? String ?: "Original"
 
       val colorMatrix = ColorMatrix()

@@ -2,9 +2,13 @@ import React, { useMemo, useState } from 'react';
 import { View, StyleSheet, Text, TouchableWithoutFeedback } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import PagerView from 'react-native-pager-view';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import * as NavigationBar from 'expo-navigation-bar';
+import { Platform } from 'react-native';
 import { useMediaStore } from '../../store/useMediaStore';
 import { useViewerStore } from '../../store/useViewerStore';
 import { PixoraMediaInfo } from '../../services/media/mediaTypes';
@@ -53,9 +57,17 @@ export default function ViewerScreen() {
     // Unlock orientation when viewer mounts
     ScreenOrientation.unlockAsync();
     
-    // Re-lock to portrait when leaving viewer
+    // Hide Android navigation bar for immersive view
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden').catch(() => {});
+    }
+    
+    // Re-lock to portrait and show nav bar when leaving viewer
     return () => {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      if (Platform.OS === 'android') {
+        NavigationBar.setVisibilityAsync('visible').catch(() => {});
+      }
     };
   }, []);
 
@@ -80,28 +92,41 @@ export default function ViewerScreen() {
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ headerShown: false, animation: 'fade' }} />
-      
-      <PagerView
-        style={styles.pager}
-        initialPage={initialIndex}
-        onPageSelected={handlePageSelected}
-        scrollEnabled={!isZoomed}
-      >
-        {media.map((item, index) => {
-          // Render optimization: only render adjacent pages
-          if (Math.abs(index - currentIndex) > 2) {
-            return <View key={item.id} />;
-          }
-          return <MediaPage key={item.id} item={item} isActive={index === currentIndex} />;
-        })}
-      </PagerView>
+  const router = require('expo-router').router;
 
-      <ViewerControls item={currentMedia} />
-      <MediaDetailsModal item={currentMedia} />
-    </View>
+  const verticalSwipe = Gesture.Pan()
+    .activeOffsetY([-20, 20])
+    .failOffsetX([-20, 20])
+    .onEnd((e) => {
+      if (Math.abs(e.velocityY) > 500 || Math.abs(e.translationY) > 100) {
+        runOnJS(router.back)();
+      }
+    });
+
+  return (
+    <GestureDetector gesture={verticalSwipe}>
+      <View style={styles.container}>
+        <Stack.Screen options={{ headerShown: false, animation: 'fade' }} />
+        
+        <PagerView
+          style={styles.pager}
+          initialPage={initialIndex}
+          onPageSelected={handlePageSelected}
+          scrollEnabled={!isZoomed}
+        >
+          {media.map((item, index) => {
+            // Render optimization: only render adjacent pages
+            if (Math.abs(index - currentIndex) > 2) {
+              return <View key={item.id} />;
+            }
+            return <MediaPage key={item.id} item={item} isActive={index === currentIndex} />;
+          })}
+        </PagerView>
+
+        <ViewerControls item={currentMedia} />
+        <MediaDetailsModal item={currentMedia} />
+      </View>
+    </GestureDetector>
   );
 }
 
@@ -127,17 +152,20 @@ const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolea
   }, [isActive, player]);
 
   const toggleControls = useViewerStore(state => state.toggleControls);
+  const videoTap = Gesture.Tap().onEnd(() => {
+    runOnJS(toggleControls)();
+  });
   
   return (
-    <TouchableWithoutFeedback onPress={toggleControls}>
-      <View style={[styles.page, { paddingBottom: 80, paddingTop: 60 }]}>
+    <GestureDetector gesture={videoTap}>
+      <View style={styles.page}>
         <VideoView
           style={styles.media}
           player={player}
           nativeControls
         />
       </View>
-    </TouchableWithoutFeedback>
+    </GestureDetector>
   );
 };
 
