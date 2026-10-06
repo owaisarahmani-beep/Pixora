@@ -47,9 +47,21 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease
 
-      - name: 🚀 Upload APK Artifact
+      - name: 🔨 Build Android Dev APK
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: 🚀 Upload Release APK
         uses: actions/upload-artifact@v4
         with:
           name: Pixora-App-Release
           path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 7
+
+      - name: 🚀 Upload Dev APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pixora-App-Dev
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 7
