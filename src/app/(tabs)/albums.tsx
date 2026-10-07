@@ -8,6 +8,8 @@ import { useMediaStore } from '../../store/useMediaStore';
 import { useVisibleAlbums } from '../../hooks/useVisibleMedia';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
+import { usePrivacyStore } from '../../store/usePrivacyStore';
+import { useSelectionStore } from '../../store/useSelectionStore';
 
 export default function AlbumsScreen() {
   const theme = useTheme();
@@ -24,13 +26,49 @@ export default function AlbumsScreen() {
     }
   }, [loadAlbums, permissionStatus]);
 
+  const lockedAlbumIds = usePrivacyStore(state => state.lockedAlbumIds);
+  const unlockAlbum = usePrivacyStore(state => state.unlockAlbum);
+  
+  const isSelectionMode = useSelectionStore(state => state.isSelectionMode && state.selectionContext === 'album');
+  const enterSelectionMode = useSelectionStore(state => state.enterSelectionMode);
+  const toggleSelection = useSelectionStore(state => state.toggleSelection);
+  const isSelected = useSelectionStore(state => state.isSelected);
+  
+  const handlePressAlbum = async (albumId: string) => {
+    if (isSelectionMode) {
+      toggleSelection(albumId);
+      return;
+    }
+
+    const isLocked = lockedAlbumIds.includes(albumId);
+    if (isLocked) {
+      const success = await unlockAlbum(albumId);
+      if (!success) return;
+    }
+    router.push(`/album/${albumId}`);
+  };
+
+  const handleLongPressAlbum = (albumId: string) => {
+    if (!isSelectionMode) {
+      enterSelectionMode('album', albumId);
+    }
+  };
+
   const renderAlbum = ({ item }: { item: any }) => {
-    const coverUri = albumCovers[item.id];
+    const isLocked = lockedAlbumIds.includes(item.id);
+    const coverUri = isLocked ? null : albumCovers[item.id];
+    const selected = isSelectionMode && isSelected(item.id);
     
     return (
       <Pressable 
-        style={[styles.albumCard, { backgroundColor: theme.surface }]}
-        onPress={() => router.push(`/album/${item.id}`)}
+        style={[
+          styles.albumCard, 
+          { backgroundColor: selected ? theme.surfaceHighlight || '#2C3E50' : theme.surface },
+          selected && { borderWidth: 2, borderColor: theme.accent }
+        ]}
+        onPress={() => handlePressAlbum(item.id)}
+        onLongPress={() => handleLongPressAlbum(item.id)}
+        delayLongPress={300}
       >
         <View style={[styles.albumIcon, { backgroundColor: theme.background }]}>
           {coverUri ? (
@@ -41,7 +79,7 @@ export default function AlbumsScreen() {
               transition={200}
             />
           ) : (
-            <Ionicons name="folder" size={32} color={theme.accent} />
+            <Ionicons name={isLocked ? "lock-closed" : "folder"} size={32} color={theme.accent} />
           )}
         </View>
         <View style={styles.albumInfo}>
@@ -49,10 +87,14 @@ export default function AlbumsScreen() {
             {item.title}
           </Text>
           <Text style={[styles.albumCount, { color: theme.textMuted }]}>
-            {item.assetCount} items
+            {isLocked ? "Locked Album" : `${item.assetCount} items`}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
+        {selected ? (
+          <Ionicons name="checkmark-circle" size={24} color={theme.accent} />
+        ) : (
+          <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
+        )}
       </Pressable>
     );
   };

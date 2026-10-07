@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, StyleSheet, Text, TouchableWithoutFeedback } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import PagerView from 'react-native-pager-view';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -19,7 +19,7 @@ import MediaDetailsModal from '../../components/viewer/MediaDetailsModal';
 import { useSearchStore } from '../../store/useSearchStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useAlbumsStore } from '../../store/useAlbumsStore';
-import { useVisibleMedia } from '../../hooks/useVisibleMedia';
+import { useAuthorizedMedia, MediaContext } from '../../hooks/useVisibleMedia';
 
 export default function ViewerScreen() {
   const { id, source } = useLocalSearchParams();
@@ -30,6 +30,8 @@ export default function ViewerScreen() {
   
   const searchMedia = useSearchStore(state => state.searchResults);
   const favoritesMedia = useFavoritesStore(state => state.favoritesMedia);
+  
+  const activeAlbumId = useAlbumsStore(state => state.activeAlbumId);
   const albumMediaInfo = useAlbumsStore(state => state.activeAlbumMedia);
   const albumLoadMore = useAlbumsStore(state => state.loadMoreAlbumMedia);
   const albumHasNext = useAlbumsStore(state => state.hasNextPage);
@@ -37,12 +39,25 @@ export default function ViewerScreen() {
   const isSearch = source === 'search';
   const isFavorites = source === 'favorites';
   const isAlbum = source === 'album';
+  const isLockedAlbum = source === 'locked';
+  const isHidden = source === 'hidden';
+  const isPrivate = source === 'private';
+  const isArchive = source === 'archive';
   
-  const rawMedia = isSearch ? searchMedia : isFavorites ? favoritesMedia : isAlbum ? albumMediaInfo : galleryMedia;
-  const media = useVisibleMedia(rawMedia);
+  const rawMedia = isSearch ? searchMedia : isFavorites ? favoritesMedia : (isAlbum || isLockedAlbum) ? albumMediaInfo : galleryMedia;
+  
+  const authContext: MediaContext = useMemo(() => {
+    if (isPrivate) return 'private';
+    if (isHidden) return 'hidden';
+    if (isArchive) return 'archive';
+    if (isLockedAlbum && activeAlbumId) return { type: 'locked_album', albumId: activeAlbumId };
+    return 'public';
+  }, [isPrivate, isHidden, isArchive, isLockedAlbum, activeAlbumId]);
 
-  const loadMoreMedia = isSearch || isFavorites ? () => {} : isAlbum ? albumLoadMore : galleryLoadMore;
-  const hasNextPage = isSearch || isFavorites ? false : isAlbum ? albumHasNext : galleryHasNext;
+  const media = useAuthorizedMedia(rawMedia, authContext);
+
+  const loadMoreMedia = isSearch || isFavorites ? () => {} : (isAlbum || isLockedAlbum) ? albumLoadMore : galleryLoadMore;
+  const hasNextPage = isSearch || isFavorites ? false : (isAlbum || isLockedAlbum) ? albumHasNext : galleryHasNext;
 
   const { isZoomed } = useViewerStore();
   
@@ -54,15 +69,10 @@ export default function ViewerScreen() {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
   React.useEffect(() => {
-    // Unlock orientation when viewer mounts
     ScreenOrientation.unlockAsync();
-    
-    // Hide Android navigation bar for immersive view
     if (Platform.OS === 'android') {
       NavigationBar.setVisibilityAsync('hidden').catch(() => {});
     }
-    
-    // Re-lock to portrait and show nav bar when leaving viewer
     return () => {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
       if (Platform.OS === 'android') {
@@ -86,7 +96,6 @@ export default function ViewerScreen() {
     const newIndex = e.nativeEvent.position;
     setCurrentIndex(newIndex);
     
-    // Pagination boundary check
     if (newIndex >= media.length - 10 && hasNextPage) {
       loadMoreMedia();
     }
@@ -115,7 +124,6 @@ export default function ViewerScreen() {
           scrollEnabled={!isZoomed}
         >
           {media.map((item, index) => {
-            // Render optimization: only render adjacent pages
             if (Math.abs(index - currentIndex) > 2) {
               return <View key={item.id} />;
             }
@@ -139,6 +147,8 @@ const MediaPage = React.memo(({ item, isActive }: { item: PixoraMediaInfo, isAct
 });
 MediaPage.displayName = 'MediaPage';
 
+// BUG #1 FIX: Extracted video logic. NO Gesture wrapper.
+// This allows native expo-video controls to absorb and process all tap/seek events.
 const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolean }) => {
   const player = useVideoPlayer(item.uri, (p) => {
     p.loop = true;
@@ -151,21 +161,15 @@ const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolea
     }
   }, [isActive, player]);
 
-  const toggleControls = useViewerStore(state => state.toggleControls);
-  const videoTap = Gesture.Tap().onEnd(() => {
-    runOnJS(toggleControls)();
-  });
-  
   return (
-    <GestureDetector gesture={videoTap}>
-      <View style={styles.page}>
-        <VideoView
-          style={styles.media}
-          player={player}
-          nativeControls
-        />
-      </View>
-    </GestureDetector>
+    <View style={styles.page}>
+      <VideoView
+        style={styles.media}
+        player={player}
+        nativeControls
+        contentFit="contain"
+      />
+    </View>
   );
 };
 

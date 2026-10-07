@@ -1,18 +1,28 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAlbumsStore } from '../../store/useAlbumsStore';
+import { usePrivacyStore } from '../../store/usePrivacyStore';
+import { useAuthorizedMedia } from '../../hooks/useVisibleMedia';
+import { groupMediaByDate } from '../../utils/dateGrouping';
 import PhotoGrid from '../../components/gallery/PhotoGrid';
+import { useSecureScreen } from '../../hooks/useSecureScreen';
 
 export default function AlbumMediaScreen() {
   const { id } = useLocalSearchParams();
   const theme = useTheme();
+  
+  const isLocked = usePrivacyStore(state => state.isAlbumLocked(id as string));
+  const isUnlocked = usePrivacyStore(state => state.unlockedAlbums.includes(id as string));
+  
+  // Protect screen if album is locked
+  useSecureScreen(isLocked);
 
   const { 
     albums, 
-    activeAlbumGrouped, 
+    activeAlbumMedia, 
     isLoadingMedia, 
     openAlbum, 
     loadMoreAlbumMedia 
@@ -25,6 +35,25 @@ export default function AlbumMediaScreen() {
       openAlbum(id);
     }
   }, [id, openAlbum]);
+
+  // Apply Access Control and group
+  const authorizedMedia = useAuthorizedMedia(
+    activeAlbumMedia, 
+    isLocked ? { type: 'locked_album', albumId: id as string } : 'public'
+  );
+  
+  const groupedMedia = useMemo(() => groupMediaByDate(authorizedMedia), [authorizedMedia]);
+
+  // If it's a locked album and not unlocked in session, block view
+  if (isLocked && !isUnlocked) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <Stack.Screen options={{ title: 'Locked Album', headerBackTitle: 'Albums' }} />
+        <Ionicons name="lock-closed" size={48} color={theme.textMuted} />
+        <Text style={{ color: theme.textMuted, marginTop: 16 }}>Authentication Required</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -43,17 +72,17 @@ export default function AlbumMediaScreen() {
         }} 
       />
 
-      {isLoadingMedia && activeAlbumGrouped.length === 0 ? (
+      {isLoadingMedia && groupedMedia.length === 0 ? (
         <View style={styles.centerState}>
           <ActivityIndicator size="large" color={theme.accent} />
         </View>
-      ) : activeAlbumGrouped.length > 0 ? (
+      ) : groupedMedia.length > 0 ? (
         <PhotoGrid
-          groupedMedia={activeAlbumGrouped}
+          groupedMedia={groupedMedia}
           onEndReached={loadMoreAlbumMedia}
           isRefreshing={false}
           onRefresh={() => {}}
-          source="album"
+          source={isLocked ? 'locked' : 'album'}
         />
       ) : (
         <View style={styles.centerState}>

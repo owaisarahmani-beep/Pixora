@@ -84,7 +84,12 @@ export default function HiddenMediaScreen() {
         keyExtractor={item => item.id}
         renderItem={({ item }) => (
           <View style={styles.photoContainer}>
-            <Image source={{ uri: item.uri }} style={styles.photo} />
+            <Pressable 
+              style={{ flex: 1 }} 
+              onPress={() => router.push({ pathname: `/viewer/[id]`, params: { id: item.id, source: 'hidden' } })}
+            >
+              <Image source={{ uri: item.uri }} style={styles.photo} />
+            </Pressable>
             <Pressable style={styles.unhideOverlay} onPress={() => unhideAssets([item.id])}>
               <Ionicons name="eye" size={24} color="#FFF" />
             </Pressable>

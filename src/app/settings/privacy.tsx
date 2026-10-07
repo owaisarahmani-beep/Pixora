@@ -55,6 +55,24 @@ export default function PrivacySettingsScreen() {
           </View>
         </View>
 
+        {/* Private Vault Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.accent }]}>Private Vault</Text>
+          <Text style={[styles.description, { color: theme.textMuted }]}>
+            Strictly protected individual photos and videos. Requires authentication to access. Never visible in searches or albums.
+          </Text>
+          
+          <Link href="/settings/private-vault" asChild>
+            <Pressable style={[styles.linkRow, { backgroundColor: theme.surface }]}>
+              <Text style={[styles.rowTitle, { color: theme.text }]}>Open Private Vault</Text>
+              <View style={styles.badgeContainer}>
+                <Ionicons name="shield-checkmark" size={16} color={theme.accent} style={{ marginRight: 8 }} />
+                <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
+              </View>
+            </Pressable>
+          </Link>
+        </View>
+
         {/* Hidden Media Section */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.accent }]}>Hidden Media</Text>

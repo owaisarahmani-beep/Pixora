@@ -19,17 +19,40 @@ function formatDuration(duration: number) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+import { useSelectionStore } from '../../store/useSelectionStore';
+
 const PhotoThumbnail = ({ item, numColumns, source = 'gallery' }: Props) => {
   const { width } = useWindowDimensions();
   const itemSize = Math.max(10, (width - SPACING * (numColumns - 1)) / numColumns);
+  
+  const isSelectionMode = useSelectionStore(state => state.isSelectionMode && state.selectionContext === 'media');
+  const isSelected = useSelectionStore(state => state.isSelected(item.id));
+  const enterSelectionMode = useSelectionStore(state => state.enterSelectionMode);
+  const toggleSelection = useSelectionStore(state => state.toggleSelection);
+
+  const handlePress = () => {
+    if (isSelectionMode) {
+      toggleSelection(item.id);
+    } else {
+      router.push({ pathname: `/viewer/[id]`, params: { id: item.id, source } });
+    }
+  };
+
+  const handleLongPress = () => {
+    if (!isSelectionMode) {
+      enterSelectionMode('media', item.id);
+    }
+  };
 
   return (
     <Pressable 
       style={[styles.container, { width: itemSize, height: itemSize, marginBottom: SPACING, marginRight: SPACING }]}
-      onPress={() => router.push({ pathname: `/viewer/[id]`, params: { id: item.id, source } })}
+      onPress={handlePress}
+      onLongPress={handleLongPress}
+      delayLongPress={300}
     >
       <Image
-        style={styles.image}
+        style={[styles.image, isSelected && styles.selectedImage]}
         source={{ uri: item.uri }}
         contentFit="cover"
         transition={200}
@@ -40,6 +63,14 @@ const PhotoThumbnail = ({ item, numColumns, source = 'gallery' }: Props) => {
         <View style={styles.videoBadge}>
           <Ionicons name="play" size={12} color="#FFFFFF" />
           <Text style={styles.durationText}>{formatDuration(item.duration)}</Text>
+        </View>
+      )}
+
+      {isSelectionMode && (
+        <View style={styles.selectionOverlay}>
+          <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+            {isSelected && <Ionicons name="checkmark" size={16} color="#FFF" />}
+          </View>
         </View>
       )}
     </Pressable>
@@ -74,5 +105,29 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     marginLeft: 2,
+  },
+  selectedImage: {
+    opacity: 0.7,
+    transform: [{ scale: 0.9 }],
+  },
+  selectionOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    padding: 6,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  checkboxSelected: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
   },
 });
