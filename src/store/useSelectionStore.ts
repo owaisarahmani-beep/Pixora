@@ -6,13 +6,15 @@ interface SelectionState {
   isSelectionMode: boolean;
   selectionContext: SelectionContextType;
   selectedIds: Set<string>;
+  availableIds: string[];
   
   // Actions
-  enterSelectionMode: (context: 'media' | 'album', initialId?: string) => void;
+  enterSelectionMode: (context: 'media' | 'album', initialId?: string, availableIds?: string[]) => void;
   exitSelectionMode: () => void;
+  setAvailableIds: (ids: string[]) => void;
   
   toggleSelection: (id: string) => void;
-  selectAll: (ids: string[]) => void;
+  selectAll: () => void;
   deselectAll: () => void;
   
   isSelected: (id: string) => boolean;
@@ -22,13 +24,19 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   isSelectionMode: false,
   selectionContext: null,
   selectedIds: new Set<string>(),
+  availableIds: [],
 
-  enterSelectionMode: (context, initialId) => {
+  enterSelectionMode: (context, initialId, availableIds = []) => {
     set({
       isSelectionMode: true,
       selectionContext: context,
       selectedIds: initialId ? new Set([initialId]) : new Set(),
+      availableIds: availableIds.length > 0 ? availableIds : get().availableIds,
     });
+  },
+
+  setAvailableIds: (ids: string[]) => {
+    set({ availableIds: ids });
   },
 
   exitSelectionMode: () => {
@@ -36,6 +44,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       isSelectionMode: false,
       selectionContext: null,
       selectedIds: new Set(),
+      availableIds: [],
     });
   },
 
@@ -62,11 +71,10 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
     }
   },
 
-  selectAll: (ids: string[]) => {
-    if (!get().isSelectionMode) return;
-    const newSet = new Set(get().selectedIds);
-    ids.forEach(id => newSet.add(id));
-    set({ selectedIds: newSet });
+  selectAll: () => {
+    const { availableIds, isSelectionMode } = get();
+    if (!isSelectionMode) return;
+    set({ selectedIds: new Set(availableIds) });
   },
 
   deselectAll: () => {
@@ -74,6 +82,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       isSelectionMode: false,
       selectionContext: null,
       selectedIds: new Set(),
+      availableIds: [],
     });
   },
 

@@ -50,7 +50,8 @@ export default function AlbumsScreen() {
 
   const handleLongPressAlbum = (albumId: string) => {
     if (!isSelectionMode) {
-      enterSelectionMode('album', albumId);
+      const allIds = canonicalAlbums.map(a => a.id);
+      enterSelectionMode('album', albumId, allIds);
     }
   };
 

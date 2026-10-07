@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useTheme } from '../../theme/ThemeProvider';
 import { MediaGroup, PixoraMediaInfo } from '../../services/media/mediaTypes';
+import { useSelectionStore } from '../../store/useSelectionStore';
 import PhotoThumbnail from './PhotoThumbnail';
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
   onEndReached: () => void;
   isRefreshing: boolean;
   onRefresh: () => void;
-  source?: 'gallery' | 'search' | 'favorites' | 'album';
+  source?: 'gallery' | 'search' | 'favorites' | 'album' | 'locked';
 }
 
 type ListItem = 
@@ -21,6 +22,17 @@ const NUM_COLUMNS = 4;
 
 export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, onRefresh, source = 'gallery' }: Props) {
   const theme = useTheme();
+  
+  const setAvailableIds = useSelectionStore(state => state.setAvailableIds);
+  const isSelectionMode = useSelectionStore(state => state.isSelectionMode);
+
+  useEffect(() => {
+    if (isSelectionMode) {
+      const allIds: string[] = [];
+      groupedMedia.forEach(group => group.data.forEach(m => allIds.push(m.id)));
+      setAvailableIds(allIds);
+    }
+  }, [isSelectionMode, groupedMedia, setAvailableIds]);
 
   const data = useMemo(() => {
     const flattened: ListItem[] = [];

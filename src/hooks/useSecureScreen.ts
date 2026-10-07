@@ -11,14 +11,10 @@ export function useSecureScreen(isActive: boolean = true) {
   useEffect(() => {
     if (Platform.OS !== 'android') return;
 
-    let ScreenCapture: any;
-    try {
-      // Dynamically require so it doesn't crash the JS bundle if the native module is missing in the current APK
-      ScreenCapture = require('expo-screen-capture');
-    } catch (e) {
-      console.warn('ExpoScreenCapture native module is missing. Please rebuild the dev client.');
-      return;
-    }
+    // TODO: Re-enable `require('expo-screen-capture')` once the new APK is installed.
+    // RedBox catches the NativeModule missing error even inside a try/catch, 
+    // so we must completely stub this out for now to allow dev testing.
+    let ScreenCapture: any = null;
 
     let isActiveState = false;
 
