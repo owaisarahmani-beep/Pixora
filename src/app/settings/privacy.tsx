@@ -63,7 +63,7 @@ export default function PrivacySettingsScreen() {
           </Text>
           
           <Link href="/settings/private-vault" asChild>
-            <Pressable style={[styles.linkRow, { backgroundColor: theme.surface }]}>
+            <Pressable style={StyleSheet.flatten([styles.linkRow, { backgroundColor: theme.surface }])}>
               <Text style={[styles.rowTitle, { color: theme.text }]}>Open Private Vault</Text>
               <View style={styles.badgeContainer}>
                 <Ionicons name="shield-checkmark" size={16} color={theme.accent} style={{ marginRight: 8 }} />
@@ -82,7 +82,7 @@ export default function PrivacySettingsScreen() {
           </Text>
           
           <Link href="/settings/hidden-media" asChild>
-            <Pressable style={[styles.linkRow, { backgroundColor: theme.surface }]}>
+            <Pressable style={StyleSheet.flatten([styles.linkRow, { backgroundColor: theme.surface }])}>
               <Text style={[styles.rowTitle, { color: theme.text }]}>Manage Hidden Media</Text>
               <View style={styles.badgeContainer}>
                 <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />

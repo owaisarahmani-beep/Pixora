@@ -16,7 +16,7 @@ export default function SettingsScreen() {
 
       <View style={styles.list}>
         <Link href="/settings/privacy" asChild>
-          <Pressable style={[styles.item, { borderBottomColor: '#333333' }]}>
+          <Pressable style={StyleSheet.flatten([styles.item, { borderBottomColor: '#333333' }])}>
             <View style={styles.itemLeft}>
               <Ionicons name="shield-checkmark" size={24} color={theme.text} style={styles.icon} />
               <Text style={[styles.itemText, { color: theme.text }]}>Privacy</Text>
