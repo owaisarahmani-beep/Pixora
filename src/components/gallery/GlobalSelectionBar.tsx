@@ -8,7 +8,7 @@ import { usePrivacyStore } from '../../store/usePrivacyStore';
 import { useMediaStore } from '../../store/useMediaStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 
-export default function GlobalSelectionBar() {
+export default function GlobalSelectionBar({ tabBarHeight = 0 }: { tabBarHeight?: number }) {
   const { isSelectionMode, selectionContext, selectedIds, availableIds, exitSelectionMode, selectAll, deselectAll } = useSelectionStore();
   const insets = useSafeAreaInsets();
   const favoritesStore = useFavoritesStore();
@@ -130,8 +130,8 @@ export default function GlobalSelectionBar() {
         </View>
       </Animated.View>
 
-      {/* Bottom Action Area */}
-      <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+      {/* Bottom Action Area — sits directly above the tab bar */}
+      <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[styles.bottomBar, { bottom: tabBarHeight, paddingBottom: 12 }]}>
         <View style={styles.bottomContent}>
           <Pressable onPress={() => handleAction('share')} style={styles.actionItem}>
             <Ionicons name="share-outline" size={24} color="#FFF" />

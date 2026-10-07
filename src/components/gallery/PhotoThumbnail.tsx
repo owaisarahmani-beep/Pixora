@@ -8,7 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 interface Props {
   item: PixoraMediaInfo;
   numColumns: number;
-  source?: 'gallery' | 'search' | 'favorites' | 'album';
+  source?: 'gallery' | 'search' | 'favorites' | 'album' | 'locked' | 'archive' | 'hidden' | 'private';
+  allIds?: string[];
 }
 
 const SPACING = 2;
@@ -21,7 +22,7 @@ function formatDuration(duration: number) {
 
 import { useSelectionStore } from '../../store/useSelectionStore';
 
-const PhotoThumbnail = ({ item, numColumns, source = 'gallery' }: Props) => {
+const PhotoThumbnail = ({ item, numColumns, source = 'gallery', allIds = [] }: Props) => {
   const { width } = useWindowDimensions();
   const itemSize = Math.max(10, (width - SPACING * (numColumns - 1)) / numColumns);
   
@@ -40,7 +41,7 @@ const PhotoThumbnail = ({ item, numColumns, source = 'gallery' }: Props) => {
 
   const handleLongPress = () => {
     if (!isSelectionMode) {
-      enterSelectionMode('media', item.id);
+      enterSelectionMode('media', item.id, allIds);
     }
   };
 

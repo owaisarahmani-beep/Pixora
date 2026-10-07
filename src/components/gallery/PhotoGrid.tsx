@@ -11,7 +11,7 @@ interface Props {
   onEndReached: () => void;
   isRefreshing: boolean;
   onRefresh: () => void;
-  source?: 'gallery' | 'search' | 'favorites' | 'album' | 'locked';
+  source?: 'gallery' | 'search' | 'favorites' | 'album' | 'locked' | 'archive' | 'hidden' | 'private';
 }
 
 type ListItem = 
@@ -26,13 +26,17 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
   const setAvailableIds = useSelectionStore(state => state.setAvailableIds);
   const isSelectionMode = useSelectionStore(state => state.isSelectionMode);
 
+  const allIds = useMemo(() => {
+    const ids: string[] = [];
+    groupedMedia.forEach(group => group.data.forEach(m => ids.push(m.id)));
+    return ids;
+  }, [groupedMedia]);
+
   useEffect(() => {
     if (isSelectionMode) {
-      const allIds: string[] = [];
-      groupedMedia.forEach(group => group.data.forEach(m => allIds.push(m.id)));
       setAvailableIds(allIds);
     }
-  }, [isSelectionMode, groupedMedia, setAvailableIds]);
+  }, [isSelectionMode, allIds, setAvailableIds]);
 
   const data = useMemo(() => {
     const flattened: ListItem[] = [];
@@ -61,7 +65,7 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
     return (
       <View style={styles.row}>
         {item.items.map((media) => (
-          <PhotoThumbnail key={media.id} item={media} numColumns={NUM_COLUMNS} source={source} />
+          <PhotoThumbnail key={media.id} item={media} numColumns={NUM_COLUMNS} source={source} allIds={allIds} />
         ))}
       </View>
     );

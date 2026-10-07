@@ -3,14 +3,12 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import PrivacyGuard from '../components/privacy/PrivacyGuard';
-import GlobalSelectionBar from '../components/gallery/GlobalSelectionBar';
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <StatusBar style="light" />
-        <GlobalSelectionBar />
         <PrivacyGuard>
           <Stack
             screenOptions={{
