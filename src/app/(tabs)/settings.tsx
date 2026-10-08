@@ -24,6 +24,15 @@ export default function SettingsScreen() {
             <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
           </Pressable>
         </Link>
+        <Link href="/storage" asChild>
+          <Pressable style={StyleSheet.flatten([styles.item, { borderBottomColor: '#333333' }])}>
+            <View style={styles.itemLeft}>
+              <Ionicons name="server-outline" size={24} color={theme.text} style={styles.icon} />
+              <Text style={[styles.itemText, { color: theme.text }]}>Storage Cleaner</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.textMuted} />
+          </Pressable>
+        </Link>
       </View>
     </View>
   );

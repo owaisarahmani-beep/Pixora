@@ -29,6 +29,7 @@ export default function RootLayout() {
             <Stack.Screen name="slideshow" options={{ headerShown: false, animation: 'fade' }} />
             <Stack.Screen name="smart-album/[id]" options={{ headerShown: true }} />
             <Stack.Screen name="album/[id]" options={{ headerShown: true }} />
+            <Stack.Screen name="storage" options={{ title: 'Storage Cleaner', headerShown: true }} />
           </Stack>
         </PrivacyGuard>
       </ThemeProvider>
