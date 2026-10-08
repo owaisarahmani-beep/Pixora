@@ -18,6 +18,7 @@ interface MediaState {
   loadMoreMedia: () => Promise<void>;
   refreshMedia: () => Promise<void>;
   deleteMediaAsync: (id: string) => Promise<boolean>;
+  permanentDeleteAsync: (id: string) => Promise<boolean>;
 }
 
 export const useMediaStore = create<MediaState>((set, get) => ({
@@ -127,21 +128,47 @@ export const useMediaStore = create<MediaState>((set, get) => ({
 
   deleteMediaAsync: async (id: string) => {
     try {
-      // Need to import MediaLibrary at top if we use it directly, but mediaStoreService has no delete method?
-      // Wait, let's just use MediaLibrary directly.
-      const MediaLibrary = require('expo-media-library');
-      await MediaLibrary.deleteAssetsAsync([id]);
-      
       const { media } = get();
+      const item = media.find(m => m.id === id);
+      if (!item) return false;
+
+      // Soft-delete: move to Pixora trash (30-day recovery)
+      const { useTrashStore } = require('./useTrashStore');
+      useTrashStore.getState().moveToTrash({
+        id: item.id,
+        uri: item.uri,
+        filename: item.filename,
+        mediaType: item.mediaType,
+        width: item.width,
+        height: item.height,
+        creationTime: item.creationTime,
+        duration: item.duration,
+      });
+
+      // Remove from gallery view immediately
       const updatedMedia = media.filter(m => m.id !== id);
       set({ 
         media: updatedMedia,
-        groupedMedia: groupMediaByDate(updatedMedia)
+        groupedMedia: groupMediaByDate(updatedMedia),
       });
       return true;
     } catch (e) {
       console.error('Delete failed', e);
       return false;
     }
-  }
+  },
+
+  permanentDeleteAsync: async (id: string) => {
+    try {
+      const MediaLibrary = require('expo-media-library');
+      await MediaLibrary.deleteAssetsAsync([id]);
+      const { media } = get();
+      const updatedMedia = media.filter(m => m.id !== id);
+      set({ media: updatedMedia, groupedMedia: groupMediaByDate(updatedMedia) });
+      return true;
+    } catch (e) {
+      console.error('Permanent delete failed', e);
+      return false;
+    }
+  },
 }));

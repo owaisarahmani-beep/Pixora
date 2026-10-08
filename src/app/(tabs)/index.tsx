@@ -1,11 +1,13 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, AppState, AppStateStatus, Button, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, AppState, AppStateStatus, Button, ActivityIndicator, Pressable } from 'react-native';
 import * as Linking from 'expo-linking';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useMediaStore } from '../../store/useMediaStore';
 import PhotoGrid from '../../components/gallery/PhotoGrid';
 import { useVisibleMedia } from '../../hooks/useVisibleMedia';
 import { groupMediaByDate } from '../../utils/dateGrouping';
+
 
 export default function PhotosScreen() {
   const theme = useTheme();
@@ -76,6 +78,20 @@ export default function PhotosScreen() {
     );
   }
 
+  const [sortOrder, setSortOrder] = React.useState<'newest' | 'oldest'>('newest');
+  const [filterType, setFilterType] = React.useState<'all' | 'photo' | 'video'>('all');
+
+  const filteredGrouped = React.useMemo(() => {
+    let media = visibleMedia;
+    if (filterType !== 'all') {
+      media = media.filter(m => m.mediaType === filterType);
+    }
+    if (sortOrder === 'oldest') {
+      media = [...media].sort((a, b) => a.creationTime - b.creationTime);
+    }
+    return groupMediaByDate(media);
+  }, [visibleMedia, sortOrder, filterType]);
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {permissionStatus === 'LIMITED' && (
@@ -86,8 +102,39 @@ export default function PhotosScreen() {
           <Button title="Manage" onPress={requestPermissions} color={theme.accent} />
         </View>
       )}
+      
+      {/* Sort/Filter bar */}
+      <View style={[styles.filterBar, { backgroundColor: theme.background, borderBottomColor: theme.surface }]}>
+        <Pressable 
+          style={[styles.filterChip, filterType === 'all' && { backgroundColor: theme.accent }]}
+          onPress={() => setFilterType('all')}
+        >
+          <Text style={[styles.filterChipText, { color: filterType === 'all' ? '#FFF' : theme.textMuted }]}>All</Text>
+        </Pressable>
+        <Pressable 
+          style={[styles.filterChip, filterType === 'photo' && { backgroundColor: theme.accent }]}
+          onPress={() => setFilterType('photo')}
+        >
+          <Text style={[styles.filterChipText, { color: filterType === 'photo' ? '#FFF' : theme.textMuted }]}>Photos</Text>
+        </Pressable>
+        <Pressable 
+          style={[styles.filterChip, filterType === 'video' && { backgroundColor: theme.accent }]}
+          onPress={() => setFilterType('video')}
+        >
+          <Text style={[styles.filterChipText, { color: filterType === 'video' ? '#FFF' : theme.textMuted }]}>Videos</Text>
+        </Pressable>
+        <View style={{ flex: 1 }} />
+        <Pressable 
+          style={styles.sortBtn}
+          onPress={() => setSortOrder(s => s === 'newest' ? 'oldest' : 'newest')}
+        >
+          <Ionicons name={sortOrder === 'newest' ? 'arrow-down' : 'arrow-up'} size={14} color={theme.textMuted} />
+          <Text style={[styles.sortText, { color: theme.textMuted }]}>{sortOrder === 'newest' ? 'Newest' : 'Oldest'}</Text>
+        </Pressable>
+      </View>
+
       <PhotoGrid 
-        groupedMedia={groupedMedia}
+        groupedMedia={filteredGrouped}
         onEndReached={loadMoreMedia}
         isRefreshing={isRefreshing}
         onRefresh={refreshMedia}
@@ -123,5 +170,35 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     marginRight: 12,
+  },
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 6,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#555',
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  sortText: {
+    fontSize: 13,
   },
 });
