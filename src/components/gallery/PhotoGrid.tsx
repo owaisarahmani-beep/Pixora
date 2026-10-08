@@ -15,16 +15,21 @@ interface Props {
 }
 
 type ListItem = 
-  | { type: 'header'; title: string }
+  | { type: 'header'; title: string; assetIds: string[] }
   | { type: 'row'; items: PixoraMediaInfo[] };
 
 const NUM_COLUMNS = 4;
+
+import { Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, onRefresh, source = 'gallery' }: Props) {
   const theme = useTheme();
   
   const setAvailableIds = useSelectionStore(state => state.setAvailableIds);
   const isSelectionMode = useSelectionStore(state => state.isSelectionMode);
+  const selectedIds = useSelectionStore(state => state.selectedIds);
+  const selectMultiple = useSelectionStore(state => state.selectMultiple);
 
   const allIds = useMemo(() => {
     const ids: string[] = [];
@@ -41,7 +46,7 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
   const data = useMemo(() => {
     const flattened: ListItem[] = [];
     groupedMedia.forEach((group) => {
-      flattened.push({ type: 'header', title: group.title });
+      flattened.push({ type: 'header', title: group.title, assetIds: group.data.map(m => m.id) });
       
       for (let i = 0; i < group.data.length; i += NUM_COLUMNS) {
         flattened.push({
@@ -55,9 +60,27 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
 
   const renderItem = ({ item }: { item: ListItem }) => {
     if (item.type === 'header') {
+      let isAllSelected = false;
+      if (isSelectionMode && item.assetIds.length > 0) {
+        const selectedCount = item.assetIds.filter(id => selectedIds.has(id)).length;
+        isAllSelected = selectedCount === item.assetIds.length;
+      }
+
       return (
-        <View style={[styles.headerContainer, { backgroundColor: theme.background }]}>
+        <View style={[styles.headerContainer, { backgroundColor: theme.background, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 16 }]}>
           <Text style={[styles.headerText, { color: theme.text }]}>{item.title}</Text>
+          {isSelectionMode && (
+            <Pressable 
+              onPress={() => selectMultiple(item.assetIds, !isAllSelected)}
+              style={styles.dateSelectBtn}
+            >
+              <Ionicons 
+                name={isAllSelected ? "checkmark-circle" : "ellipse-outline"} 
+                size={22} 
+                color={isAllSelected ? theme.accent : theme.textMuted} 
+              />
+            </Pressable>
+          )}
         </View>
       );
     }
@@ -101,4 +124,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
   },
+  dateSelectBtn: {
+    padding: 4,
+  }
 });

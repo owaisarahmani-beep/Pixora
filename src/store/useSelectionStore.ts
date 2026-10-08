@@ -16,6 +16,7 @@ interface SelectionState {
   toggleSelection: (id: string) => void;
   selectAll: () => void;
   deselectAll: () => void;
+  selectMultiple: (ids: string[], select: boolean) => void;
   
   isSelected: (id: string) => boolean;
 }
@@ -83,6 +84,20 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectionContext: null,
       selectedIds: new Set(),
       availableIds: [],
+    });
+  },
+
+  selectMultiple: (ids: string[], select: boolean) => {
+    set((state) => {
+      const newSelected = new Set(state.selectedIds);
+      ids.forEach((id) => {
+        if (select) {
+          newSelected.add(id);
+        } else {
+          newSelected.delete(id);
+        }
+      });
+      return { selectedIds: newSelected };
     });
   },
 
