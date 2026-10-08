@@ -56,8 +56,8 @@ const PhotoThumbnail = ({ item, numColumns, source = 'gallery', allIds = [] }: P
         style={[styles.image, isSelected && styles.selectedImage]}
         source={{ uri: item.uri }}
         contentFit="cover"
-        transition={200}
-        cachePolicy="disk"
+        transition={0}
+        cachePolicy="memory-disk"
       />
       
       {item.mediaType === 'video' && (

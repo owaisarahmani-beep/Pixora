@@ -21,12 +21,18 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MAX_DOTS = 10;
 const SLIDE_INTERVAL_MS = 3000;
 
+import { useMemories } from '../hooks/useMemories';
+import { Dimensions } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 export default function SlideshowScreen() {
   const insets = useSafeAreaInsets();
-  const { source, albumId, smartAlbumId } = useLocalSearchParams<{
-    source: string;
+  const { source, albumId, smartAlbumId, memoryId } = useLocalSearchParams<{
+    source?: string;
     albumId?: string;
     smartAlbumId?: string;
+    memoryId?: string;
   }>();
 
   // Media sources
@@ -35,6 +41,7 @@ export default function SlideshowScreen() {
 
   const publicMedia = useAuthorizedMedia(allMedia, 'public');
   const archiveMedia = useAuthorizedMedia(allMedia, 'archive');
+  const memories = useMemories(publicMedia);
 
   // Resolve media array based on source param
   const slides: PixoraMediaInfo[] = useMemo(() => {
@@ -42,6 +49,9 @@ export default function SlideshowScreen() {
 
     if (source === 'archive') {
       base = archiveMedia;
+    } else if (source === 'memory' && memoryId) {
+      const memory = memories.find(m => m.id === memoryId);
+      base = memory ? memory.assets : [];
     } else if (source === 'smart' && smartAlbumId) {
       const def = SMART_ALBUM_DEFS.find(d => d.id === smartAlbumId);
       base = def ? publicMedia.filter(def.filter) : publicMedia;
@@ -54,7 +64,7 @@ export default function SlideshowScreen() {
 
     // Only show photos for slideshow (videos skipped)
     return base.filter(m => m.mediaType === 'photo');
-  }, [source, albumId, smartAlbumId, publicMedia, archiveMedia]);
+  }, [source, albumId, smartAlbumId, memoryId, publicMedia, archiveMedia, memories]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -83,6 +93,25 @@ export default function SlideshowScreen() {
 
   const togglePlayPause = () => setIsPlaying(p => !p);
 
+  const handleTouch = (evt: any) => {
+    const x = evt.nativeEvent.locationX;
+    if (x < SCREEN_WIDTH * 0.3) {
+      setCurrentIndex(prev => (prev - 1 + Math.max(slides.length, 1)) % Math.max(slides.length, 1));
+      if (isPlaying) {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = setInterval(advance, SLIDE_INTERVAL_MS);
+      }
+    } else if (x > SCREEN_WIDTH * 0.7) {
+      advance();
+      if (isPlaying) {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = setInterval(advance, SLIDE_INTERVAL_MS);
+      }
+    } else {
+      togglePlayPause();
+    }
+  };
+
   const currentSlide = slides[currentIndex];
 
   // Dot indicators — show up to MAX_DOTS; when more, show proportional position
@@ -109,13 +138,13 @@ export default function SlideshowScreen() {
       <StatusBar hidden />
 
       {/* Full-screen image */}
-      <Pressable style={styles.imagePressable} onPress={togglePlayPause}>
+      <Pressable style={styles.imagePressable} onPress={(e) => handleTouch(e)}>
         <Image
           key={currentSlide?.id}
           source={{ uri: currentSlide?.uri }}
           style={styles.image}
           contentFit="cover"
-          transition={400}
+          transition={0}
         />
       </Pressable>
 

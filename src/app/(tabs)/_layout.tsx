@@ -68,7 +68,7 @@ export default function TabsLayout() {
       </Tabs>
 
       {/* Selection bar rendered here so it sits above the tab bar area correctly */}
-      <GlobalSelectionBar tabBarHeight={TAB_BAR_HEIGHT} />
+      <GlobalSelectionBar tabBarHeight={0} />
     </View>
   );
 }

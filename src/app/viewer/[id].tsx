@@ -163,12 +163,21 @@ const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolea
 
   return (
     <View style={styles.page}>
-      <VideoView
-        style={styles.media}
-        player={player}
-        nativeControls
-        contentFit="contain"
-      />
+      {isActive ? (
+        <VideoView
+          style={styles.media}
+          player={player}
+          nativeControls
+          contentFit="contain"
+        />
+      ) : (
+        <Image
+          source={{ uri: item.uri }}
+          style={styles.media}
+          contentFit="contain"
+          cachePolicy="memory-disk"
+        />
+      )}
     </View>
   );
 };

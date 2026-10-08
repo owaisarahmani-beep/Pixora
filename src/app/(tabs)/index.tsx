@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, AppState, AppStateStatus, Button, ActivityIndicator, Pressable } from 'react-native';
 import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,8 @@ import MemoriesCarousel from '../../components/gallery/MemoriesCarousel';
 
 export default function PhotosScreen() {
   const theme = useTheme();
+  
+  // 1. All hooks must be at the top!
   const { 
     permissionStatus, 
     media: canonicalMedia, 
@@ -24,8 +26,22 @@ export default function PhotosScreen() {
   } = useMediaStore();
 
   const visibleMedia = useVisibleMedia(canonicalMedia);
-  const groupedMedia = React.useMemo(() => groupMediaByDate(visibleMedia), [visibleMedia]);
+  const groupedMedia = useMemo(() => groupMediaByDate(visibleMedia), [visibleMedia]);
   const memories = useMemories(visibleMedia);
+  
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [filterType, setFilterType] = useState<'all' | 'photo' | 'video'>('all');
+
+  const filteredGrouped = useMemo(() => {
+    let media = visibleMedia;
+    if (filterType !== 'all') {
+      media = media.filter(m => m.mediaType === filterType);
+    }
+    if (sortOrder === 'oldest') {
+      media = [...media].sort((a, b) => a.creationTime - b.creationTime);
+    }
+    return groupMediaByDate(media);
+  }, [visibleMedia, sortOrder, filterType]);
 
   useEffect(() => {
     checkPermissions();
@@ -41,6 +57,7 @@ export default function PhotosScreen() {
     return () => subscription.remove();
   }, [checkPermissions]);
 
+  // 2. Early Returns (only AFTER all hooks are called)
   if (permissionStatus === 'UNDETERMINED') {
     return (
       <View style={[styles.center, { backgroundColor: theme.background }]}>
@@ -67,20 +84,15 @@ export default function PhotosScreen() {
     );
   }
 
-  const [sortOrder, setSortOrder] = React.useState<'newest' | 'oldest'>('newest');
-  const [filterType, setFilterType] = React.useState<'all' | 'photo' | 'video'>('all');
+  if (groupedMedia.length === 0) {
+    return (
+      <View style={[styles.center, { backgroundColor: theme.background }]}>
+        <Text style={[styles.text, { color: theme.textMuted }]}>No photos or videos found.</Text>
+      </View>
+    );
+  }
 
-  const filteredGrouped = React.useMemo(() => {
-    let media = visibleMedia;
-    if (filterType !== 'all') {
-      media = media.filter(m => m.mediaType === filterType);
-    }
-    if (sortOrder === 'oldest') {
-      media = [...media].sort((a, b) => a.creationTime - b.creationTime);
-    }
-    return groupMediaByDate(media);
-  }, [visibleMedia, sortOrder, filterType]);
-
+  // 3. Main Render
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {permissionStatus === 'LIMITED' && (
@@ -132,15 +144,14 @@ export default function PhotosScreen() {
         onEndReached={loadMoreMedia}
         isRefreshing={isRefreshing}
         onRefresh={refreshMedia}
+        source="gallery"
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   center: {
     flex: 1,
     alignItems: 'center',
