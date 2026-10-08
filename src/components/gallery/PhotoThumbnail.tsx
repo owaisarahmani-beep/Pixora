@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.9 }],
   },
   selectionOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill as any,
     padding: 6,
     justifyContent: 'flex-start',
     alignItems: 'flex-end',

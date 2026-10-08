@@ -42,6 +42,7 @@ jobs:
           MYAPP_UPLOAD_STORE_PASSWORD: password
           MYAPP_UPLOAD_KEY_ALIAS: my-key-alias
           MYAPP_UPLOAD_KEY_PASSWORD: password
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
           cd android
           chmod +x gradlew

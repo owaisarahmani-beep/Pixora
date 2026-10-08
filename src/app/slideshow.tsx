@@ -22,9 +22,6 @@ const MAX_DOTS = 10;
 const SLIDE_INTERVAL_MS = 3000;
 
 import { useMemories } from '../hooks/useMemories';
-import { Dimensions } from 'react-native';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function SlideshowScreen() {
   const insets = useSafeAreaInsets();
@@ -202,7 +199,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   imagePressable: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill as any,
   },
   image: {
     width: SCREEN_WIDTH,

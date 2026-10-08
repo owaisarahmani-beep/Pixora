@@ -175,7 +175,7 @@ export default function AlbumsScreen() {
         <Text style={[styles.headerTitle, { color: theme.text }]}>Albums</Text>
       </View>
 
-      <SectionList
+      <SectionList<any, any>
         sections={sections}
         keyExtractor={(item, index) => (typeof item === 'string' ? item : (item as any).id ?? String(index))}
         contentContainerStyle={{ paddingBottom: 120 }}
