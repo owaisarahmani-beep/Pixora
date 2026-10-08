@@ -1,400 +1,262 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, ScrollView } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert, Dimensions } from 'react-native';
+import { useLocalSearchParams, router } from 'expo-router';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system';
-import Slider from '@react-native-community/slider';
+import * as MediaLibrary from 'expo-media-library';
 
 import { useTheme } from '../../theme/ThemeProvider';
-import { useEditorStore } from '../../store/useEditorStore';
 import { useMediaStore } from '../../store/useMediaStore';
-import { useSearchStore } from '../../store/useSearchStore';
-import { useAlbumsStore } from '../../store/useAlbumsStore';
-import { useFavoritesStore } from '../../store/useFavoritesStore';
-import { usePrivacyStore } from '../../store/usePrivacyStore';
-import PixoraEditorModule from '../../../modules/pixora-editor/src/PixoraEditorModule';
-import { mediaStoreService } from '../../services/media/MediaStoreService';
-import CropOverlay from '../../components/editor/CropOverlay';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function EditorScreen() {
-  const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams();
+  const { id } = useLocalSearchParams();
+  const { media, refreshMedia } = useMediaStore();
+
+  const [originalUri, setOriginalUri] = useState<string | null>(null);
+  const [currentUri, setCurrentUri] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   
-  const id = Array.isArray(params.id) ? params.id[0] : params.id;
-  const source = Array.isArray(params.source) ? params.source[0] : params.source;
-
-  const { 
-    currentState, historyIndex, history, 
-    previewUri, originalUri, isExporting,
-    initEditor, updateState, undo, redo, reset,
-    setPreviewUri
-  } = useEditorStore();
-
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'adjust' | 'transform' | 'filters' | 'crop'>('adjust');
-
-  const previewBaseUriRef = useRef<string | null>(null);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [imageLayout, setImageLayout] = useState<{width: number, height: number, x: number, y: number} | null>(null);
-  
-  // Pending state for crop mode
-  const [pendingCrop, setPendingCrop] = useState<{ originX: number; originY: number; width: number; height: number } | null>(null);
-
-  const hiddenAlbumIds = usePrivacyStore(state => state.hiddenAlbumIds);
-
-  // Find media item synchronously
-  const item = React.useMemo(() => {
-    let collection: any[] = [];
-    if (source === 'gallery') collection = useMediaStore.getState().media;
-    else if (source === 'search') collection = useSearchStore.getState().searchResults;
-    else if (source === 'album') collection = useAlbumsStore.getState().activeAlbumMedia;
-    else if (source === 'favorites') collection = useFavoritesStore.getState().favoritesMedia;
-    
-    return collection.find(m => m.id === id);
-  }, [id, source]);
-
-  const isHidden = React.useMemo(() => {
-    if (!item || !item.albumId) return false;
-    return hiddenAlbumIds.includes(item.albumId);
-  }, [item, hiddenAlbumIds]);
+  // Edit State
+  const [rotation, setRotation] = useState(0);
+  const [flipX, setFlipX] = useState(false);
+  const [flipY, setFlipY] = useState(false);
 
   useEffect(() => {
-    if (!item || isHidden) {
-      return;
+    const item = media.find(m => m.id === id);
+    if (item && item.mediaType === 'photo') {
+      setOriginalUri(item.uri);
+      setCurrentUri(item.uri);
+    } else {
+      Alert.alert('Error', 'Unsupported media type for editing.');
+      router.back();
     }
-    if (item.mediaType === 'video') {
-      return;
-    }
+  }, [id, media]);
 
-    initEditor(item.id, item.uri);
-
-    // Create a downscaled base for the live preview
-    ImageManipulator.manipulateAsync(
-      item.uri,
-      [{ resize: { width: 800 } }],
-      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
-    ).then(result => {
-      previewBaseUriRef.current = result.uri;
-      setPreviewUri(result.uri);
-      setIsLoading(false);
-    }).catch(e => {
-      console.error('Failed to create preview base', e);
-      // Fallback to original
-      previewBaseUriRef.current = item.uri;
-      setIsLoading(false);
-    });
-  }, [item, initEditor, setPreviewUri, isHidden]);
-
-  // Sync pending crop when entering crop tab or when crop state changes via undo/redo
-  useEffect(() => {
-    if (activeTab === 'crop') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPendingCrop(currentState.crop || { originX: 0, originY: 0, width: 1, height: 1 });
-    }
-  }, [activeTab, currentState.crop]);
-
-  // Live preview processor
-  const processPreview = useCallback(async (stateToProcess: any) => {
-    if (!previewBaseUriRef.current) return;
+  // Apply edits live (debounced visually by the user pressing buttons)
+  const applyEdits = async (newRotation: number, newFlipX: boolean, newFlipY: boolean) => {
+    if (!originalUri) return;
+    setIsProcessing(true);
     try {
-      const resultUri = await PixoraEditorModule.processImageAsync(previewBaseUriRef.current, stateToProcess);
-      setPreviewUri(resultUri);
-    } catch (e) {
-      console.error('Preview processing failed', e);
-    }
-  }, [setPreviewUri]);
-
-  // Debounce preview updates when sliders change
-  useEffect(() => {
-    if (isLoading || isExporting) return;
-    
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    debounceTimerRef.current = setTimeout(() => {
-      processPreview(currentState);
-    }, 150); // 150ms throttle
-
-    return () => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    };
-  }, [currentState, isLoading, isExporting, processPreview]);
-
-  const handleExport = async () => {
-    if (!originalUri || isExporting) return;
-    useEditorStore.getState().setIsExporting(true);
-
-    try {
-      // 1. Process full resolution
-      const exportUri = await PixoraEditorModule.processImageAsync(originalUri, currentState);
+      const actions: ImageManipulator.Action[] = [];
       
-      // 2. Insert to MediaStore
-      const newMedia = await mediaStoreService.exportImageToMediaStoreAsync(exportUri);
-      
-      // 3. Cleanup temp file
-      try {
-        await FileSystem.deleteAsync(exportUri, { idempotent: true });
-      } catch {}
+      if (newFlipX) actions.push({ flip: ImageManipulator.FlipType.Horizontal });
+      if (newFlipY) actions.push({ flip: ImageManipulator.FlipType.Vertical });
+      if (newRotation !== 0) actions.push({ rotate: newRotation });
 
-      if (newMedia) {
-        // Refresh gallery
-        await useMediaStore.getState().refreshMedia();
-        alert('Edited copy saved to your gallery.');
-        router.back();
+      if (actions.length > 0) {
+        const result = await ImageManipulator.manipulateAsync(
+          originalUri,
+          actions,
+          { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        setCurrentUri(result.uri);
       } else {
-        alert("The edited copy couldn't be saved. Your original is unchanged.");
+        setCurrentUri(originalUri);
       }
-    } catch {
-      alert("We couldn't edit this photo. Your original is safe.");
+    } catch (e) {
+      console.error('Image manipulation failed', e);
     } finally {
-      useEditorStore.getState().setIsExporting(false);
+      setIsProcessing(false);
     }
   };
 
-  if (!item || isHidden) {
-    return (
-      <View style={[styles.center, { backgroundColor: theme.background }]}>
-        <Text style={[styles.errorText, { color: theme.text }]}>This photo is no longer available.</Text>
-        <Pressable onPress={() => router.back()} style={{ padding: 16, backgroundColor: theme.surface, borderRadius: 8 }}>
-          <Text style={{ color: theme.accent }}>Go Back</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  const handleRotate = () => {
+    const nextRot = (rotation + 90) % 360;
+    setRotation(nextRot);
+    applyEdits(nextRot, flipX, flipY);
+  };
 
-  if (item.mediaType === 'video') {
-    return (
-      <View style={[styles.center, { backgroundColor: theme.background }]}>
-        <Ionicons name="videocam-off-outline" size={64} color={theme.textMuted} style={{ marginBottom: 16 }} />
-        <Text style={[styles.errorText, { color: theme.text }]}>Video editing is not currently supported.</Text>
-        <Pressable onPress={() => router.back()} style={{ padding: 16, backgroundColor: theme.surface, borderRadius: 8 }}>
-          <Text style={{ color: theme.accent }}>Go Back</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  const handleFlipHorizontal = () => {
+    const nextFlipX = !flipX;
+    setFlipX(nextFlipX);
+    applyEdits(rotation, nextFlipX, flipY);
+  };
 
-  if (isLoading) {
+  const handleFlipVertical = () => {
+    const nextFlipY = !flipY;
+    setFlipY(nextFlipY);
+    applyEdits(rotation, flipX, nextFlipY);
+  };
+
+  const handleReset = () => {
+    setRotation(0);
+    setFlipX(false);
+    setFlipY(false);
+    setCurrentUri(originalUri);
+  };
+
+  const handleSave = async () => {
+    if (!currentUri || currentUri === originalUri) {
+      router.back();
+      return;
+    }
+    
+    setIsProcessing(true);
+    try {
+      // Create new asset in OS media store
+      await MediaLibrary.createAssetAsync(currentUri);
+      await refreshMedia();
+      
+      Alert.alert('Success', 'Edited photo saved to Gallery!');
+      router.back();
+    } catch (e) {
+      console.error('Failed to save edited photo', e);
+      Alert.alert('Error', 'Could not save the edited photo.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  if (!originalUri) {
     return (
-      <View style={[styles.center, { backgroundColor: theme.background }]}>
+      <View style={[styles.container, { backgroundColor: theme.background, justifyContent: 'center' }]}>
         <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
 
+  const hasEdits = rotation !== 0 || flipX || flipY;
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
-      {/* Top Bar */}
-      <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()} style={styles.iconButton} accessibilityLabel="Cancel">
-          <Ionicons name="close" size={28} color={theme.text} />
+    <View style={[styles.container, { backgroundColor: '#000', paddingTop: insets.top }]}>
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} style={styles.iconBtn}>
+          <Ionicons name="close" size={28} color="#FFF" />
         </Pressable>
-        <Text style={[styles.title, { color: theme.text }]}>Edit</Text>
-        <Pressable onPress={reset} style={styles.textButton} accessibilityLabel="Reset">
-          <Text style={{ color: theme.text, fontSize: 16 }}>Reset</Text>
+        <Text style={styles.title}>Edit Photo</Text>
+        <Pressable onPress={handleSave} style={[styles.saveBtn, { opacity: isProcessing ? 0.5 : 1 }]} disabled={isProcessing}>
+          <Text style={[styles.saveText, { color: theme.accent }]}>Save Copy</Text>
         </Pressable>
       </View>
 
-      {/* Preview Area */}
-      <View style={styles.previewContainer}>
-        {previewUri && item && (
-          <View 
-            style={[styles.imageWrapper, { aspectRatio: item.width / item.height }]}
-            onLayout={(e) => {
-              setImageLayout({
-                width: e.nativeEvent.layout.width,
-                height: e.nativeEvent.layout.height,
-                x: 0,
-                y: 0
-              });
-            }}
-          >
-            <Image 
-              source={previewUri}
-              style={StyleSheet.absoluteFill}
-              contentFit="contain"
-              cachePolicy="none"
-            />
-            {activeTab === 'crop' && imageLayout && pendingCrop && (
-              <CropOverlay 
-                key="crop-overlay"
-                imageLayout={imageLayout}
-                initialCrop={pendingCrop}
-                onCropChange={setPendingCrop}
-              />
-            )}
-          </View>
-        )}
-        {isExporting && (
-          <View style={styles.exportOverlay}>
-            <ActivityIndicator size="large" color={theme.accent} />
-            <Text style={{ color: '#FFF', marginTop: 12 }}>Saving Copy...</Text>
+      {/* Main Image Area */}
+      <View style={styles.imageContainer}>
+        <Image 
+          source={{ uri: currentUri || originalUri }} 
+          style={styles.image} 
+          contentFit="contain"
+          transition={200}
+        />
+        {isProcessing && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#FFF" />
           </View>
         )}
       </View>
 
-      {/* History Controls */}
-      <View style={styles.historyBar}>
-        <Pressable 
-          onPress={undo} 
-          disabled={historyIndex === 0}
-          style={[styles.historyButton, historyIndex === 0 && { opacity: 0.5 }]}
-          accessibilityLabel="Undo"
-        >
-          <Ionicons name="arrow-undo" size={24} color={theme.text} />
-        </Pressable>
-        <Pressable 
-          onPress={redo} 
-          disabled={historyIndex === history.length - 1}
-          style={[styles.historyButton, historyIndex === history.length - 1 && { opacity: 0.5 }]}
-          accessibilityLabel="Redo"
-        >
-          <Ionicons name="arrow-redo" size={24} color={theme.text} />
-        </Pressable>
-      </View>
+      {/* Controls Area */}
+      <View style={[styles.controlsContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+        
+        <View style={styles.toolsRow}>
+          <Pressable style={styles.toolBtn} onPress={handleRotate}>
+            <Ionicons name="refresh" size={24} color="#FFF" />
+            <Text style={styles.toolText}>Rotate</Text>
+          </Pressable>
+          
+          <Pressable style={styles.toolBtn} onPress={handleFlipHorizontal}>
+            <Ionicons name="swap-horizontal" size={24} color="#FFF" />
+            <Text style={styles.toolText}>Flip H</Text>
+          </Pressable>
+          
+          <Pressable style={styles.toolBtn} onPress={handleFlipVertical}>
+            <Ionicons name="swap-vertical" size={24} color="#FFF" />
+            <Text style={styles.toolText}>Flip V</Text>
+          </Pressable>
+        </View>
 
-      {/* Tools Menu */}
-      <View style={styles.toolTabs}>
-        <Pressable onPress={() => setActiveTab('adjust')} style={[styles.tab, activeTab === 'adjust' && { borderBottomColor: theme.accent, borderBottomWidth: 2 }]}>
-          <Text style={{ color: activeTab === 'adjust' ? theme.accent : theme.textMuted }}>Adjust</Text>
-        </Pressable>
-        <Pressable onPress={() => setActiveTab('crop')} style={[styles.tab, activeTab === 'crop' && { borderBottomColor: theme.accent, borderBottomWidth: 2 }]}>
-          <Text style={{ color: activeTab === 'crop' ? theme.accent : theme.textMuted }}>Crop</Text>
-        </Pressable>
-        <Pressable onPress={() => setActiveTab('transform')} style={[styles.tab, activeTab === 'transform' && { borderBottomColor: theme.accent, borderBottomWidth: 2 }]}>
-          <Text style={{ color: activeTab === 'transform' ? theme.accent : theme.textMuted }}>Transform</Text>
-        </Pressable>
-        <Pressable onPress={() => setActiveTab('filters')} style={[styles.tab, activeTab === 'filters' && { borderBottomColor: theme.accent, borderBottomWidth: 2 }]}>
-          <Text style={{ color: activeTab === 'filters' ? theme.accent : theme.textMuted }}>Filters</Text>
-        </Pressable>
-      </View>
-
-      {/* Tool Content */}
-      <View style={styles.toolContent}>
-        {activeTab === 'adjust' && (
-          <ScrollView style={styles.scrollView}>
-            <AdjustmentSlider label="Brightness" value={currentState.brightness} min={-1} max={1} onChange={(v: number) => updateState({ brightness: v })} />
-            <AdjustmentSlider label="Contrast" value={currentState.contrast} min={0} max={2} onChange={(v: number) => updateState({ contrast: v })} />
-            <AdjustmentSlider label="Saturation" value={currentState.saturation} min={0} max={2} onChange={(v: number) => updateState({ saturation: v })} />
-            <AdjustmentSlider label="Warmth" value={currentState.warmth} min={-1} max={1} onChange={(v: number) => updateState({ warmth: v })} />
-          </ScrollView>
+        {hasEdits && (
+          <Pressable style={styles.resetBtn} onPress={handleReset}>
+            <Text style={styles.resetText}>Reset Edits</Text>
+          </Pressable>
         )}
 
-        {activeTab === 'crop' && (
-          <View style={styles.center}>
-            <Text style={{ color: theme.text, marginBottom: 16 }}>Drag the corners on the image to crop.</Text>
-            <View style={{ flexDirection: 'row', gap: 16 }}>
-              <Pressable 
-                onPress={() => setActiveTab('adjust')} 
-                style={{ padding: 12, backgroundColor: theme.surface, borderRadius: 8, flex: 1, alignItems: 'center' }}
-              >
-                <Text style={{ color: theme.text }}>Cancel</Text>
-              </Pressable>
-              <Pressable 
-                onPress={() => {
-                  if (pendingCrop) updateState({ crop: pendingCrop });
-                  setActiveTab('adjust');
-                }} 
-                style={{ padding: 12, backgroundColor: theme.accent, borderRadius: 8, flex: 1, alignItems: 'center' }}
-              >
-                <Text style={{ color: '#000', fontWeight: 'bold' }}>Apply</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-
-        {activeTab === 'transform' && (
-          <View style={styles.transformRow}>
-            <Pressable onPress={() => updateState({ rotation: (currentState.rotation + 90) % 360 })} style={styles.transformButton}>
-              <Ionicons name="refresh" size={28} color={theme.text} />
-              <Text style={{ color: theme.text, marginTop: 8 }}>Rotate</Text>
-            </Pressable>
-            <Pressable onPress={() => updateState({ flipX: !currentState.flipX })} style={styles.transformButton}>
-              <Ionicons name="swap-horizontal" size={28} color={theme.text} />
-              <Text style={{ color: theme.text, marginTop: 8 }}>Flip H</Text>
-            </Pressable>
-            <Pressable onPress={() => updateState({ flipY: !currentState.flipY })} style={styles.transformButton}>
-              <Ionicons name="swap-vertical" size={28} color={theme.text} />
-              <Text style={{ color: theme.text, marginTop: 8 }}>Flip V</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {activeTab === 'filters' && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersRow}>
-            {['Original', 'Mono', 'Warm', 'Cool', 'Vintage', 'Fade'].map((f) => (
-              <Pressable 
-                key={f} 
-                onPress={() => updateState({ filter: f as any })}
-                style={[styles.filterButton, currentState.filter === f && { borderColor: theme.accent, borderWidth: 2 }]}
-              >
-                <Text style={{ color: theme.text }}>{f}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
       </View>
-
-      {/* Bottom Bar */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom || 20 }]}>
-        <Pressable onPress={handleExport} disabled={isExporting} style={[styles.saveButton, { backgroundColor: theme.accent }]}>
-          <Text style={styles.saveButtonText}>Save Copy</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-// Minimal simulated slider since we might not have @react-native-community/slider installed
-function AdjustmentSlider({ label, value, min, max, onChange }: any) {
-  const theme = useTheme();
-  
-  return (
-    <View style={{ marginBottom: 24, paddingHorizontal: 16 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-        <Text style={{ color: theme.text }}>{label}</Text>
-        <Text style={{ color: theme.textMuted }}>{value.toFixed(2)}</Text>
-      </View>
-      <Slider
-        style={{ width: '100%', height: 40 }}
-        minimumValue={min}
-        maximumValue={max}
-        value={value}
-        onValueChange={onChange}
-        minimumTrackTintColor={theme.accent}
-        maximumTrackTintColor={theme.surface}
-        thumbTintColor={theme.accent}
-      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { fontSize: 16, marginBottom: 16, textAlign: 'center', padding: 24 },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-  iconButton: { padding: 4 },
-  textButton: { padding: 4 },
-  title: { fontSize: 18, fontWeight: '600' },
-  previewContainer: { flex: 1, backgroundColor: '#000', position: 'relative', alignItems: 'center', justifyContent: 'center' },
-  imageWrapper: { width: '100%', maxHeight: '100%' },
-  previewImage: { flex: 1 },
-  exportOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
-  historyBar: { flexDirection: 'row', justifyContent: 'center', paddingVertical: 8, gap: 24 },
-  historyButton: { padding: 8 },
-  toolTabs: { flexDirection: 'row', justifyContent: 'space-around', borderBottomWidth: 1, borderBottomColor: '#333' },
-  tab: { paddingVertical: 12, paddingHorizontal: 16 },
-  toolContent: { height: 180, paddingTop: 16 },
-  scrollView: { flex: 1 },
-  transformRow: { flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center', flex: 1 },
-  transformButton: { alignItems: 'center', padding: 16 },
-  filtersRow: { paddingHorizontal: 16 },
-  filterButton: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, backgroundColor: '#333', marginRight: 12, height: 48, justifyContent: 'center' },
-  bottomBar: { paddingHorizontal: 16, paddingTop: 12 },
-  saveButton: { padding: 16, borderRadius: 12, alignItems: 'center' },
-  saveButtonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    height: 56,
+  },
+  iconBtn: {
+    padding: 8,
+  },
+  title: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  saveBtn: {
+    padding: 8,
+  },
+  saveText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  imageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  image: {
+    width: SCREEN_WIDTH,
+    height: '100%',
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  controlsContainer: {
+    backgroundColor: '#1C1C1E',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 24,
+    paddingHorizontal: 20,
+  },
+  toolsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 20,
+  },
+  toolBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toolText: {
+    color: '#FFF',
+    fontSize: 12,
+    marginTop: 8,
+  },
+  resetBtn: {
+    alignSelf: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#333',
+    borderRadius: 20,
+    marginTop: 8,
+  },
+  resetText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 });

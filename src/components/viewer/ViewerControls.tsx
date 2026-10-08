@@ -109,7 +109,8 @@ export default function ViewerControls({ item }: Props) {
 
   const openMoreMenu = () => {
     if (Platform.OS === 'ios') {
-      const options = ['Cancel', 'Details', 'Edit'];
+      const options = ['Cancel', 'Details'];
+      if (item.mediaType === 'photo') options.push('Edit');
       if (isHidden) options.push('Unhide'); else options.push('Hide');
       if (isPrivate) options.push('Remove from Vault'); else options.push('Make Private');
       if (isArchived) options.push('Unarchive'); else options.push('Archive');
