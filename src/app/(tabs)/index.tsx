@@ -7,7 +7,8 @@ import { useMediaStore } from '../../store/useMediaStore';
 import PhotoGrid from '../../components/gallery/PhotoGrid';
 import { useVisibleMedia } from '../../hooks/useVisibleMedia';
 import { groupMediaByDate } from '../../utils/dateGrouping';
-
+import { useMemories } from '../../hooks/useMemories';
+import MemoriesCarousel from '../../components/gallery/MemoriesCarousel';
 
 export default function PhotosScreen() {
   const theme = useTheme();
@@ -24,24 +25,20 @@ export default function PhotosScreen() {
 
   const visibleMedia = useVisibleMedia(canonicalMedia);
   const groupedMedia = React.useMemo(() => groupMediaByDate(visibleMedia), [visibleMedia]);
+  const memories = useMemories(visibleMedia);
 
   useEffect(() => {
     checkPermissions();
-
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
         checkPermissions();
-        // Also refresh media if permission is already granted
         const currentStatus = useMediaStore.getState().permissionStatus;
         if (currentStatus === 'GRANTED' || currentStatus === 'LIMITED') {
           useMediaStore.getState().refreshMedia();
         }
       }
     });
-
-    return () => {
-      subscription.remove();
-    };
+    return () => subscription.remove();
   }, [checkPermissions]);
 
   if (permissionStatus === 'UNDETERMINED') {
@@ -70,14 +67,6 @@ export default function PhotosScreen() {
     );
   }
 
-  if (groupedMedia.length === 0) {
-    return (
-      <View style={[styles.center, { backgroundColor: theme.background }]}>
-        <Text style={[styles.text, { color: theme.textMuted }]}>No photos or videos found.</Text>
-      </View>
-    );
-  }
-
   const [sortOrder, setSortOrder] = React.useState<'newest' | 'oldest'>('newest');
   const [filterType, setFilterType] = React.useState<'all' | 'photo' | 'video'>('all');
 
@@ -101,6 +90,11 @@ export default function PhotosScreen() {
           </Text>
           <Button title="Manage" onPress={requestPermissions} color={theme.accent} />
         </View>
+      )}
+      
+      {/* Memories Carousel */}
+      {memories.length > 0 && filterType === 'all' && (
+        <MemoriesCarousel memories={memories} />
       )}
       
       {/* Sort/Filter bar */}
