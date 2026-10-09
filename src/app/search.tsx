@@ -2,11 +2,12 @@ import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../theme/ThemeProvider';
-import { useSearchStore } from '../../store/useSearchStore';
-import PhotoGrid from '../../components/gallery/PhotoGrid';
-import { groupMediaByDate } from '../../utils/dateGrouping';
-import { useVisibleMedia, useVisibleAlbums } from '../../hooks/useVisibleMedia';
+import { useTheme } from '../theme/ThemeProvider';
+import { router } from 'expo-router';
+import { useSearchStore } from '../store/useSearchStore';
+import PhotoGrid from '../components/gallery/PhotoGrid';
+import { groupMediaByDate } from '../utils/dateGrouping';
+import { useVisibleMedia, useVisibleAlbums } from '../hooks/useVisibleMedia';
 
 export default function SearchScreen() {
   const theme = useTheme();
@@ -41,6 +42,9 @@ export default function SearchScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
       <View style={styles.header}>
+        <Pressable onPress={() => router.back()} style={{ marginRight: 12 }}>
+          <Ionicons name="arrow-back" size={24} color={theme.text} />
+        </Pressable>
         <Text style={[styles.title, { color: theme.text }]}>Search</Text>
       </View>
 
@@ -99,7 +103,7 @@ export default function SearchScreen() {
           ))}
           
           {albums.length > 0 && <View style={styles.filterDivider} />}
-          {albums.map(album => (
+          {albums.map((album: any) => (
             <Pressable
               key={album.id}
               style={[
@@ -153,6 +157,8 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   title: {
     fontSize: 28,

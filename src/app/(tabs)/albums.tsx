@@ -11,6 +11,9 @@ import { usePrivacyStore } from '../../store/usePrivacyStore';
 import { useSelectionStore } from '../../store/useSelectionStore';
 import { useTrashStore } from '../../store/useTrashStore';
 import { useAuthorizedMedia } from '../../hooks/useVisibleMedia';
+import { useMemories } from '../../hooks/useMemories';
+import { useFavoritesStore } from '../../store/useFavoritesStore';
+import MemoriesCarousel from '../../components/gallery/MemoriesCarousel';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 
@@ -23,6 +26,12 @@ export default function AlbumsScreen() {
   
   // Run authorized filter for public context
   const publicMedia = useAuthorizedMedia(allMedia, 'public');
+  
+  // Memories
+  const memories = useMemories(publicMedia);
+  
+  // Favorites count
+  const favoritesCount = useFavoritesStore(state => state.favorites.size);
   
   // Smart albums derived from public media
   const smartAlbums = useSmartAlbums(publicMedia);
@@ -177,6 +186,9 @@ export default function AlbumsScreen() {
 
       <SectionList<any, any>
         sections={sections}
+        ListHeaderComponent={
+          memories.length > 0 ? <MemoriesCarousel memories={memories} /> : null
+        }
         keyExtractor={(item, index) => (typeof item === 'string' ? item : (item as any).id ?? String(index))}
         contentContainerStyle={{ paddingBottom: 120 }}
         renderSectionHeader={({ section }) => (
@@ -188,6 +200,7 @@ export default function AlbumsScreen() {
           if (section.title === 'Library') {
             return (
               <View>
+                {renderSpecialRow({ id: 'favorites', icon: 'heart', label: 'Favorites', sublabel: `${favoritesCount} items`, onPress: () => router.push('/favorites'), color: '#EF4444' })}
                 {renderSpecialRow({ id: 'archive', icon: 'archive', label: 'Archive', sublabel: `${archivedIds.length} items`, onPress: () => router.push('/archive') })}
                 {renderSpecialRow({ id: 'trash', icon: 'trash', label: 'Recently Deleted', sublabel: trashCount > 0 ? `${trashCount} items` : 'Empty', onPress: () => router.push('/trash'), color: '#EF4444' })}
               </View>

@@ -7,8 +7,7 @@ import { useMediaStore } from '../../store/useMediaStore';
 import PhotoGrid from '../../components/gallery/PhotoGrid';
 import { useVisibleMedia } from '../../hooks/useVisibleMedia';
 import { groupMediaByDate } from '../../utils/dateGrouping';
-import { useMemories } from '../../hooks/useMemories';
-import MemoriesCarousel from '../../components/gallery/MemoriesCarousel';
+import { router } from 'expo-router';
 
 export default function PhotosScreen() {
   const theme = useTheme();
@@ -27,7 +26,6 @@ export default function PhotosScreen() {
 
   const visibleMedia = useVisibleMedia(canonicalMedia);
   const groupedMedia = useMemo(() => groupMediaByDate(visibleMedia), [visibleMedia]);
-  const memories = useMemories(visibleMedia);
   
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [filterType, setFilterType] = useState<'all' | 'photo' | 'video'>('all');
@@ -104,11 +102,14 @@ export default function PhotosScreen() {
         </View>
       )}
       
-      {/* Memories Carousel */}
-      {memories.length > 0 && filterType === 'all' && (
-        <MemoriesCarousel memories={memories} />
-      )}
-      
+      {/* Top Search Bar */}
+      <Pressable 
+        style={[styles.searchBar, { backgroundColor: theme.surface }]} 
+        onPress={() => router.push('/search')}
+      >
+        <Ionicons name="search" size={20} color={theme.textMuted} />
+        <Text style={[styles.searchPlaceholder, { color: theme.textMuted }]}>Search your photos</Text>
+      </Pressable>
       {/* Sort/Filter bar */}
       <View style={[styles.filterBar, { backgroundColor: theme.background, borderBottomColor: theme.surface }]}>
         <Pressable 
@@ -175,6 +176,20 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     marginRight: 12,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 16,
+    height: 44,
+    borderRadius: 22,
+  },
+  searchPlaceholder: {
+    marginLeft: 8,
+    fontSize: 15,
   },
   filterBar: {
     flexDirection: 'row',

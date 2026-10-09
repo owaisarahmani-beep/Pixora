@@ -2,12 +2,13 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../theme/ThemeProvider';
-import { useFavoritesStore } from '../../store/useFavoritesStore';
-import { useMediaStore } from '../../store/useMediaStore';
-import { useVisibleMedia } from '../../hooks/useVisibleMedia';
-import { groupMediaByDate } from '../../utils/dateGrouping';
-import PhotoGrid from '../../components/gallery/PhotoGrid';
+import { useTheme } from '../theme/ThemeProvider';
+import { useFavoritesStore } from '../store/useFavoritesStore';
+import { useMediaStore } from '../store/useMediaStore';
+import { useVisibleMedia } from '../hooks/useVisibleMedia';
+import { groupMediaByDate } from '../utils/dateGrouping';
+import PhotoGrid from '../components/gallery/PhotoGrid';
+import { router } from 'expo-router';
 
 export default function FavoritesScreen() {
   const theme = useTheme();
@@ -47,6 +48,9 @@ export default function FavoritesScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
       <View style={styles.header}>
+        <Pressable onPress={() => router.back()} style={{ marginRight: 12 }}>
+          <Ionicons name="arrow-back" size={24} color={theme.text} />
+        </Pressable>
         <Text style={[styles.title, { color: theme.text }]}>Favorites</Text>
       </View>
 
@@ -80,6 +84,8 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   title: {
     fontSize: 28,
