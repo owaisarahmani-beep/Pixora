@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeProvider';
 import GlobalSelectionBar from '../../components/gallery/GlobalSelectionBar';
@@ -45,14 +45,12 @@ export default function TabsLayout() {
           name="index"
           options={{
             title: 'Photos',
-            tabBarIcon: ({ color, focused }) => (
-              <View style={[styles.iconWrapper, focused && styles.iconWrapperFocused]}>
-                <Ionicons 
-                  name={focused ? 'images' : 'images-outline'} 
-                  size={21} 
-                  color={focused ? theme.accent : color} 
-                />
-              </View>
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons 
+                name={focused ? 'images' : 'images-outline'} 
+                size={size || 24} 
+                color={color} 
+              />
             ),
           }}
         />
@@ -60,14 +58,12 @@ export default function TabsLayout() {
           name="albums"
           options={{
             title: 'Albums',
-            tabBarIcon: ({ color, focused }) => (
-              <View style={[styles.iconWrapper, focused && styles.iconWrapperFocused]}>
-                <Ionicons 
-                  name={focused ? 'albums' : 'albums-outline'} 
-                  size={21} 
-                  color={focused ? theme.accent : color} 
-                />
-              </View>
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons 
+                name={focused ? 'albums' : 'albums-outline'} 
+                size={size || 24} 
+                color={color} 
+              />
             ),
           }}
         />
@@ -75,14 +71,12 @@ export default function TabsLayout() {
           name="settings"
           options={{
             title: 'Settings',
-            tabBarIcon: ({ color, focused }) => (
-              <View style={[styles.iconWrapper, focused && styles.iconWrapperFocused]}>
-                <Ionicons 
-                  name={focused ? 'settings' : 'settings-outline'} 
-                  size={21} 
-                  color={focused ? theme.accent : color} 
-                />
-              </View>
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons 
+                name={focused ? 'settings' : 'settings-outline'} 
+                size={size || 24} 
+                color={color} 
+              />
             ),
           }}
         />
@@ -93,16 +87,3 @@ export default function TabsLayout() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  iconWrapper: {
-    paddingHorizontal: 16,
-    paddingVertical: 3,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconWrapperFocused: {
-    backgroundColor: 'rgba(103, 232, 249, 0.14)',
-  },
-});
