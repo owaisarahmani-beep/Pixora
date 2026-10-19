@@ -25,7 +25,6 @@ export default function PhotosScreen() {
   } = useMediaStore();
 
   const visibleMedia = useVisibleMedia(canonicalMedia);
-  const groupedMedia = useMemo(() => groupMediaByDate(visibleMedia), [visibleMedia]);
   
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [filterType, setFilterType] = useState<'all' | 'photo' | 'video'>('all');
@@ -74,7 +73,7 @@ export default function PhotosScreen() {
     );
   }
 
-  if (isLoading && groupedMedia.length === 0) {
+  if (isLoading && visibleMedia.length === 0) {
     return (
       <View style={[styles.center, { backgroundColor: theme.background }]}>
         <ActivityIndicator size="large" color={theme.accent} />
@@ -82,7 +81,7 @@ export default function PhotosScreen() {
     );
   }
 
-  if (groupedMedia.length === 0) {
+  if (visibleMedia.length === 0) {
     return (
       <View style={[styles.center, { backgroundColor: theme.background }]}>
         <Text style={[styles.text, { color: theme.textMuted }]}>No photos or videos found.</Text>

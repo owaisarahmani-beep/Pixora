@@ -56,7 +56,6 @@ export const useMediaStore = create<MediaState>((set, get) => ({
       
       set({
         media: assets,
-        groupedMedia: groupMediaByDate(assets),
         hasNextPage,
         endCursor,
         isLoading: false,
@@ -79,7 +78,6 @@ export const useMediaStore = create<MediaState>((set, get) => ({
       
       set({
         media: newMedia,
-        groupedMedia: groupMediaByDate(newMedia),
         hasNextPage,
         endCursor,
         isLoading: false,
@@ -116,7 +114,6 @@ export const useMediaStore = create<MediaState>((set, get) => ({
           
           set({
             media: updatedMedia,
-            groupedMedia: groupMediaByDate(updatedMedia),
           });
         }
       }
@@ -149,7 +146,6 @@ export const useMediaStore = create<MediaState>((set, get) => ({
       const updatedMedia = media.filter(m => m.id !== id);
       set({ 
         media: updatedMedia,
-        groupedMedia: groupMediaByDate(updatedMedia),
       });
       return true;
     } catch (e) {
@@ -164,7 +160,7 @@ export const useMediaStore = create<MediaState>((set, get) => ({
       await MediaLibrary.deleteAssetsAsync([id]);
       const { media } = get();
       const updatedMedia = media.filter(m => m.id !== id);
-      set({ media: updatedMedia, groupedMedia: groupMediaByDate(updatedMedia) });
+      set({ media: updatedMedia });
       return true;
     } catch (e) {
       console.error('Permanent delete failed', e);
