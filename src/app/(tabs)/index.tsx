@@ -106,19 +106,26 @@ export default function PhotosScreen() {
       {/* Top Floating Search Capsule (Google Photos style) */}
       <View style={[styles.headerContainer, { paddingTop: insets.top + 8 }]}>
         <Pressable 
-          style={[styles.searchBar, { backgroundColor: '#161D2B', borderColor: 'rgba(255, 255, 255, 0.08)' }]} 
+          style={[
+            styles.searchBar, 
+            { 
+              backgroundColor: theme.surface, 
+              borderColor: theme.border,
+              shadowOpacity: theme.isDark ? 0.2 : 0.06,
+            }
+          ]} 
           onPress={() => router.push('/search')}
         >
           <View style={styles.searchLeft}>
-            <View style={[styles.searchIconBg, { backgroundColor: 'rgba(103, 232, 249, 0.12)' }]}>
+            <View style={[styles.searchIconBg, { backgroundColor: theme.accent + '1A' }]}>
               <Ionicons name="search" size={17} color={theme.accent} />
             </View>
-            <Text style={[styles.searchPlaceholder, { color: '#8E9BAE' }]}>Search photos, albums & dates</Text>
+            <Text style={[styles.searchPlaceholder, { color: theme.textMuted }]}>Search photos, albums & dates</Text>
           </View>
 
           {/* Quick Storage Cleaner / Shortcut */}
           <Pressable 
-            style={styles.avatarPill} 
+            style={[styles.avatarPill, { backgroundColor: theme.card }]} 
             onPress={(e) => {
               e.stopPropagation();
               router.push('/storage');
@@ -130,59 +137,74 @@ export default function PhotosScreen() {
       </View>
 
       {/* Filter Chips & Sort Row */}
-      <View style={[styles.filterBar, { borderBottomColor: 'rgba(255, 255, 255, 0.06)' }]}>
+      <View style={[styles.filterBar, { borderBottomColor: theme.border }]}>
         <View style={styles.filterChipGroup}>
           <Pressable 
             style={[
               styles.filterChip, 
-              filterType === 'all' ? styles.filterChipActive : styles.filterChipInactive
+              filterType === 'all' 
+                ? { backgroundColor: theme.accent } 
+                : { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }
             ]}
             onPress={() => setFilterType('all')}
           >
             <Ionicons 
               name="grid-outline" 
               size={13} 
-              color={filterType === 'all' ? '#0F172A' : '#94A3B8'} 
+              color={filterType === 'all' ? (theme.isDark ? '#0F172A' : '#FFFFFF') : theme.textMuted} 
               style={{ marginRight: 5 }} 
             />
-            <Text style={[styles.filterChipText, filterType === 'all' && styles.filterChipTextActive]}>All</Text>
+            <Text style={[
+              styles.filterChipText, 
+              { color: filterType === 'all' ? (theme.isDark ? '#0F172A' : '#FFFFFF') : theme.textMuted }
+            ]}>All</Text>
           </Pressable>
 
           <Pressable 
             style={[
               styles.filterChip, 
-              filterType === 'photo' ? styles.filterChipActive : styles.filterChipInactive
+              filterType === 'photo' 
+                ? { backgroundColor: theme.accent } 
+                : { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }
             ]}
             onPress={() => setFilterType('photo')}
           >
             <Ionicons 
               name="camera-outline" 
               size={13} 
-              color={filterType === 'photo' ? '#0F172A' : '#94A3B8'} 
+              color={filterType === 'photo' ? (theme.isDark ? '#0F172A' : '#FFFFFF') : theme.textMuted} 
               style={{ marginRight: 5 }} 
             />
-            <Text style={[styles.filterChipText, filterType === 'photo' && styles.filterChipTextActive]}>Photos</Text>
+            <Text style={[
+              styles.filterChipText, 
+              { color: filterType === 'photo' ? (theme.isDark ? '#0F172A' : '#FFFFFF') : theme.textMuted }
+            ]}>Photos</Text>
           </Pressable>
 
           <Pressable 
             style={[
               styles.filterChip, 
-              filterType === 'video' ? styles.filterChipActive : styles.filterChipInactive
+              filterType === 'video' 
+                ? { backgroundColor: theme.accent } 
+                : { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }
             ]}
             onPress={() => setFilterType('video')}
           >
             <Ionicons 
               name="videocam-outline" 
               size={13} 
-              color={filterType === 'video' ? '#0F172A' : '#94A3B8'} 
+              color={filterType === 'video' ? (theme.isDark ? '#0F172A' : '#FFFFFF') : theme.textMuted} 
               style={{ marginRight: 5 }} 
             />
-            <Text style={[styles.filterChipText, filterType === 'video' && styles.filterChipTextActive]}>Videos</Text>
+            <Text style={[
+              styles.filterChipText, 
+              { color: filterType === 'video' ? (theme.isDark ? '#0F172A' : '#FFFFFF') : theme.textMuted }
+            ]}>Videos</Text>
           </Pressable>
         </View>
 
         <Pressable 
-          style={styles.sortBtn}
+          style={[styles.sortBtn, { backgroundColor: theme.card }]}
           onPress={() => setSortOrder(s => s === 'newest' ? 'oldest' : 'newest')}
         >
           <Ionicons name={sortOrder === 'newest' ? 'arrow-down' : 'arrow-up'} size={13} color={theme.accent} />

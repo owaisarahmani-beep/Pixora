@@ -66,7 +66,7 @@ export default function ViewerScreen() {
   const loadMoreMedia = isSearch || isFavorites ? () => {} : (isAlbum || isLockedAlbum) ? albumLoadMore : galleryLoadMore;
   const hasNextPage = isSearch || isFavorites ? false : (isAlbum || isLockedAlbum) ? albumHasNext : galleryHasNext;
 
-  const { isZoomed, setIsZoomed, setDetailsVisible } = useViewerStore();
+  const { isZoomed, setIsZoomed, detailsVisible, setDetailsVisible } = useViewerStore();
   
   const initialIndex = useMemo(() => {
     const idx = media.findIndex(m => m.id === id);
@@ -75,13 +75,15 @@ export default function ViewerScreen() {
 
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
-  // Guarantee isZoomed is clean on mount and unmount
+  // Guarantee clean viewer state on mount/unmount
   useEffect(() => {
     setIsZoomed(false);
+    setDetailsVisible(false);
     return () => {
       setIsZoomed(false);
+      setDetailsVisible(false);
     };
-  }, [setIsZoomed]);
+  }, [setIsZoomed, setDetailsVisible]);
 
   useEffect(() => {
     ScreenOrientation.unlockAsync().catch(() => {});
@@ -104,41 +106,50 @@ export default function ViewerScreen() {
 
   const currentMedia = media[currentIndex];
   
-  if (!currentMedia) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Stack.Screen options={{ headerShown: false }} />
-        <Text style={{ color: 'white' }}>Media not found</Text>
-      </View>
-    );
-  }
+  const translateY = useSharedValue(0);
+  const translateX = useSharedValue(0);
+  const scale = useSharedValue(1);
+  const detailsProgress = useSharedValue(0);
+
+  const handleDismiss = useCallback(() => {
+    router.back();
+  }, []);
+
+  const handleCloseDetails = useCallback(() => {
+    setDetailsVisible(false);
+    detailsProgress.value = withSpring(0, { damping: 22, stiffness: 220 });
+    translateY.value = withSpring(0, { damping: 22, stiffness: 220 });
+  }, [setDetailsVisible, detailsProgress, translateY]);
+
+  // Sync detailsVisible state from menu actions with spring animation
+  useEffect(() => {
+    if (detailsVisible) {
+      detailsProgress.value = withSpring(1, { damping: 22, stiffness: 200 });
+      translateY.value = withSpring(-100, { damping: 22, stiffness: 200 });
+    } else {
+      detailsProgress.value = withSpring(0, { damping: 22, stiffness: 220 });
+      if (translateY.value < 0) {
+        translateY.value = withSpring(0, { damping: 22, stiffness: 220 });
+      }
+    }
+  }, [detailsVisible, detailsProgress, translateY]);
 
   const handlePageSelected = (e: any) => {
     const newIndex = e.nativeEvent.position;
     setCurrentIndex(newIndex);
-    // Reset zoom when swiping to any page
     setIsZoomed(false);
+    if (detailsVisible) {
+      handleCloseDetails();
+    }
     
     if (newIndex >= media.length - 10 && hasNextPage) {
       loadMoreMedia();
     }
   };
 
-  const translateY = useSharedValue(0);
-  const translateX = useSharedValue(0);
-  const scale = useSharedValue(1);
-
-  const handleDismiss = useCallback(() => {
-    router.back();
-  }, []);
-
-  const handleOpenDetails = useCallback(() => {
-    setDetailsVisible(true);
-  }, [setDetailsVisible]);
-
-  // Vertical drag handler for dismiss (down) and details (up).
-  // Configured with tight failOffsetX so any horizontal swipe immediately
-  // yields control to PagerView for seamless sliding between images!
+  // Fluid vertical drag handler:
+  // - Downwards: Smooth drag to dismiss with scaling & fade
+  // - Upwards: 1:1 tactile tracking that pulls up the Details sheet directly under the finger
   const verticalDrag = Gesture.Pan()
     .enabled(!isZoomed)
     .maxPointers(1)
@@ -152,30 +163,32 @@ export default function ViewerScreen() {
         translateY.value = e.translationY;
         translateX.value = e.translationX * 0.25;
         scale.value = Math.max(0.75, 1 - (e.translationY / 1200));
+        detailsProgress.value = 0;
       } else {
-        // Dragging up (Reveal details gesture)
-        translateY.value = e.translationY * 0.6;
-        scale.value = Math.max(0.92, 1 - (Math.abs(e.translationY) / 2000));
+        // Dragging up: 1:1 tactile tracking that brings up the details sheet
+        translateY.value = e.translationY * 0.45;
+        detailsProgress.value = Math.min(1, Math.max(0, -e.translationY / 240));
       }
     })
     .onEnd((e) => {
       'worklet';
       if (e.translationY > 120 || e.velocityY > 600) {
-        // Dragged down far enough - dismiss to album/gallery
+        // Dragged down far enough -> animate offscreen and dismiss
         translateY.value = withTiming(800, { duration: 200 }, () => {
           runOnJS(handleDismiss)();
         });
-      } else if (e.translationY < -60 || e.velocityY < -400) {
-        // Dragged up far enough - open details modal!
-        translateY.value = withSpring(0, { damping: 18, stiffness: 200 });
-        translateX.value = withSpring(0, { damping: 18, stiffness: 200 });
-        scale.value = withSpring(1, { damping: 18, stiffness: 200 });
-        runOnJS(handleOpenDetails)();
+      } else if (e.translationY < -60 || e.velocityY < -500) {
+        // Dragged up far enough -> snap details sheet open with spring physics
+        detailsProgress.value = withSpring(1, { damping: 22, stiffness: 200 });
+        translateY.value = withSpring(-100, { damping: 22, stiffness: 200 });
+        runOnJS(setDetailsVisible)(true);
       } else {
-        // Cancel - smoothly spring back into place
-        translateY.value = withSpring(0, { damping: 18, stiffness: 200 });
-        translateX.value = withSpring(0, { damping: 18, stiffness: 200 });
-        scale.value = withSpring(1, { damping: 18, stiffness: 200 });
+        // Cancel -> smoothly spring back into place
+        translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
+        translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+        scale.value = withSpring(1, { damping: 20, stiffness: 200 });
+        detailsProgress.value = withSpring(0, { damping: 20, stiffness: 200 });
+        runOnJS(setDetailsVisible)(false);
       }
     });
 
@@ -206,9 +219,18 @@ export default function ViewerScreen() {
       Extrapolation.CLAMP
     );
     return {
-      opacity,
+      opacity: detailsProgress.value > 0.1 ? 0 : opacity,
     };
   });
+
+  if (!currentMedia) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <Text style={{ color: 'white' }}>Media not found</Text>
+      </View>
+    );
+  }
 
   return (
     <GestureDetector gesture={verticalDrag}>
@@ -233,14 +255,20 @@ export default function ViewerScreen() {
           </PagerView>
         </Animated.View>
 
-        {/* Controls Overlay with pointerEvents="box-none" so PagerView receives all horizontal swipes */}
+        {/* Controls Overlay */}
         <Animated.View 
           style={[StyleSheet.absoluteFill, controlsAnimatedStyle]} 
           pointerEvents="box-none"
         >
           <ViewerControls item={currentMedia} />
-          <MediaDetailsModal item={currentMedia} />
         </Animated.View>
+
+        {/* Integrated Fluid Details Bottom Sheet */}
+        <MediaDetailsModal 
+          item={currentMedia} 
+          detailsProgress={detailsProgress}
+          onClose={handleCloseDetails}
+        />
       </Animated.View>
     </GestureDetector>
   );

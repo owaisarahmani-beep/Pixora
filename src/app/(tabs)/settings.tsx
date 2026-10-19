@@ -1,11 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Link, router } from 'expo-router';
-import { useTheme } from '../../theme/ThemeProvider';
+import { router } from 'expo-router';
+import { useTheme, ThemePreference } from '../../theme/ThemeProvider';
 import { usePrivacyStore } from '../../store/usePrivacyStore';
-import { useMediaStore } from '../../store/useMediaStore';
 import { useTrashStore } from '../../store/useTrashStore';
 
 export default function SettingsScreen() {
@@ -13,308 +12,219 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
 
   const { isAppLockEnabled, privateAssetIds, hiddenAlbumIds, hiddenAssetIds, archivedAssetIds } = usePrivacyStore();
-  const media = useMediaStore(state => state.media);
-  const permissionStatus = useMediaStore(state => state.permissionStatus);
   const trashCount = useTrashStore(state => state.items.length);
-
   const hiddenTotalCount = hiddenAlbumIds.length + hiddenAssetIds.length;
+
+  const themeOptions: { label: string; value: ThemePreference; icon: any }[] = [
+    { label: 'System', value: 'system', icon: 'phone-portrait-outline' },
+    { label: 'Light', value: 'light', icon: 'sunny-outline' },
+    { label: 'Dark', value: 'dark', icon: 'moon-outline' },
+  ];
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
-      {/* Top Header */}
+      {/* Refined Header */}
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 90 }]}
       >
-        {/* Hero App Branding Card */}
-        <View style={[styles.heroCard, { backgroundColor: theme.surface, borderColor: 'rgba(255,255,255,0.06)' }]}>
-          <View style={styles.heroLeft}>
-            <View style={[styles.heroIconBadge, { backgroundColor: theme.accent + '20', borderColor: theme.accent + '40' }]}>
-              <Ionicons name="sparkles" size={28} color={theme.accent} />
-            </View>
-            <View style={styles.heroTextContainer}>
-              <View style={styles.heroTitleRow}>
-                <Text style={[styles.heroTitle, { color: theme.text }]}>Pixora Gallery</Text>
-                <View style={[styles.proBadge, { backgroundColor: theme.accent + '25' }]}>
-                  <Text style={[styles.proBadgeText, { color: theme.accent }]}>v1.0</Text>
-                </View>
-              </View>
-              <Text style={[styles.heroSubtitle, { color: theme.textMuted }]}>
-                Private • Fast • Zero Cloud Telemetry
-              </Text>
-            </View>
-          </View>
-
-          {/* Quick Metrics Capsule Bar */}
-          <View style={[styles.metricsBar, { backgroundColor: theme.background, borderColor: 'rgba(255,255,255,0.05)' }]}>
-            <View style={styles.metricItem}>
-              <Text style={[styles.metricValue, { color: theme.text }]}>{media.length}</Text>
-              <Text style={[styles.metricLabel, { color: theme.textMuted }]}>Photos</Text>
-            </View>
-            <View style={styles.metricDivider} />
-            <View style={styles.metricItem}>
-              <Text style={[styles.metricValue, { color: isAppLockEnabled ? '#10B981' : theme.accent }]}>
-                {privateAssetIds.length}
-              </Text>
-              <Text style={[styles.metricLabel, { color: theme.textMuted }]}>Vault</Text>
-            </View>
-            <View style={styles.metricDivider} />
-            <View style={styles.metricItem}>
-              <Text style={[styles.metricValue, { color: '#F59E0B' }]}>{hiddenTotalCount}</Text>
-              <Text style={[styles.metricLabel, { color: theme.textMuted }]}>Hidden</Text>
-            </View>
-            <View style={styles.metricDivider} />
-            <View style={styles.metricItem}>
-              <Text style={[styles.metricValue, { color: '#F43F5E' }]}>{trashCount}</Text>
-              <Text style={[styles.metricLabel, { color: theme.textMuted }]}>Trash</Text>
+        {/* SECTION: Appearance / Theme Selector */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>APPEARANCE</Text>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={styles.themeSelectorContainer}>
+              {themeOptions.map((opt) => {
+                const isActive = theme.themePreference === opt.value;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    style={[
+                      styles.themeOptionBtn,
+                      isActive && [
+                        styles.themeOptionBtnActive,
+                        { backgroundColor: theme.card, borderColor: theme.border }
+                      ],
+                    ]}
+                    onPress={() => theme.setThemePreference(opt.value)}
+                  >
+                    <Ionicons 
+                      name={opt.icon} 
+                      size={18} 
+                      color={isActive ? theme.accent : theme.textMuted} 
+                    />
+                    <Text style={[
+                      styles.themeOptionText, 
+                      { color: isActive ? theme.text : theme.textMuted }
+                    ]}>
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
         </View>
 
-        {/* SECTION: Privacy & Security */}
+        {/* SECTION: Security */}
         <View style={styles.section}>
-          <Text style={[styles.sectionHeader, { color: theme.textMuted }]}>SECURITY & PRIVACY</Text>
-          <View style={[styles.cardGroup, { backgroundColor: theme.surface }]}>
-            {/* Privacy Center */}
+          <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>SECURITY</Text>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            {/* App Lock & Privacy */}
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               onPress={() => router.push('/settings/privacy')}
             >
-              <View style={[styles.iconContainer, { backgroundColor: '#06B6D420' }]}>
-                <Ionicons name="shield-checkmark" size={20} color="#06B6D4" />
+              <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
+                <Ionicons name="shield-checkmark-outline" size={19} color={theme.text} />
               </View>
-              <View style={styles.rowContent}>
-                <Text style={[styles.rowTitle, { color: theme.text }]}>Privacy & App Lock</Text>
-                <Text style={[styles.rowSubtitle, { color: theme.textMuted }]}>
-                  Biometric lock, inactivity timeout & safeguards
+              <View style={styles.rowBody}>
+                <Text style={[styles.rowLabel, { color: theme.text }]}>App Lock & Biometrics</Text>
+              </View>
+              <View style={styles.rowEnd}>
+                <Text style={[styles.statusHint, { color: isAppLockEnabled ? '#10B981' : theme.textMuted }]}>
+                  {isAppLockEnabled ? 'On' : 'Off'}
                 </Text>
-              </View>
-              <View style={styles.rowRight}>
-                <View style={[
-                  styles.statusPill, 
-                  { backgroundColor: isAppLockEnabled ? '#10B98120' : 'rgba(255,255,255,0.08)' }
-                ]}>
-                  <Text style={[
-                    styles.statusPillText, 
-                    { color: isAppLockEnabled ? '#10B981' : theme.textMuted }
-                  ]}>
-                    {isAppLockEnabled ? 'Active' : 'Off'}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
               </View>
             </Pressable>
 
-            <View style={[styles.separator, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
             {/* Private Vault */}
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               onPress={() => router.push('/settings/private-vault')}
             >
-              <View style={[styles.iconContainer, { backgroundColor: '#6366F120' }]}>
-                <Ionicons name="lock-closed" size={20} color="#818CF8" />
+              <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
+                <Ionicons name="lock-closed-outline" size={19} color={theme.text} />
               </View>
-              <View style={styles.rowContent}>
-                <Text style={[styles.rowTitle, { color: theme.text }]}>Private Vault</Text>
-                <Text style={[styles.rowSubtitle, { color: theme.textMuted }]}>
-                  Encrypted personal media space
-                </Text>
+              <View style={styles.rowBody}>
+                <Text style={[styles.rowLabel, { color: theme.text }]}>Private Vault</Text>
               </View>
-              <View style={styles.rowRight}>
+              <View style={styles.rowEnd}>
                 {privateAssetIds.length > 0 && (
-                  <View style={[styles.counterBadge, { backgroundColor: '#6366F120' }]}>
-                    <Text style={[styles.counterText, { color: '#818CF8' }]}>{privateAssetIds.length}</Text>
+                  <View style={[styles.countBadge, { backgroundColor: theme.card }]}>
+                    <Text style={[styles.countText, { color: theme.textMuted }]}>{privateAssetIds.length}</Text>
                   </View>
                 )}
-                <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
               </View>
             </Pressable>
 
-            <View style={[styles.separator, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
-            {/* Hidden Media */}
+            {/* Hidden Content */}
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               onPress={() => router.push('/settings/hidden-media')}
             >
-              <View style={[styles.iconContainer, { backgroundColor: '#A855F720' }]}>
-                <Ionicons name="eye-off" size={20} color="#C084FC" />
+              <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
+                <Ionicons name="eye-off-outline" size={19} color={theme.text} />
               </View>
-              <View style={styles.rowContent}>
-                <Text style={[styles.rowTitle, { color: theme.text }]}>Hidden Media & Albums</Text>
-                <Text style={[styles.rowSubtitle, { color: theme.textMuted }]}>
-                  Manage hidden photos and folders
-                </Text>
+              <View style={styles.rowBody}>
+                <Text style={[styles.rowLabel, { color: theme.text }]}>Hidden Media & Albums</Text>
               </View>
-              <View style={styles.rowRight}>
+              <View style={styles.rowEnd}>
                 {hiddenTotalCount > 0 && (
-                  <View style={[styles.counterBadge, { backgroundColor: '#A855F720' }]}>
-                    <Text style={[styles.counterText, { color: '#C084FC' }]}>{hiddenTotalCount}</Text>
+                  <View style={[styles.countBadge, { backgroundColor: theme.card }]}>
+                    <Text style={[styles.countText, { color: theme.textMuted }]}>{hiddenTotalCount}</Text>
                   </View>
                 )}
-                <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
               </View>
             </Pressable>
           </View>
         </View>
 
-        {/* SECTION: Storage & Utilities */}
+        {/* SECTION: Library & Storage */}
         <View style={styles.section}>
-          <Text style={[styles.sectionHeader, { color: theme.textMuted }]}>STORAGE & UTILITIES</Text>
-          <View style={[styles.cardGroup, { backgroundColor: theme.surface }]}>
+          <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>LIBRARY & STORAGE</Text>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             {/* Storage Cleaner */}
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               onPress={() => router.push('/storage')}
             >
-              <View style={[styles.iconContainer, { backgroundColor: '#10B98120' }]}>
-                <Ionicons name="server-outline" size={20} color="#34D399" />
+              <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
+                <Ionicons name="sparkles-outline" size={19} color={theme.text} />
               </View>
-              <View style={styles.rowContent}>
-                <Text style={[styles.rowTitle, { color: theme.text }]}>Storage Cleaner</Text>
-                <Text style={[styles.rowSubtitle, { color: theme.textMuted }]}>
-                  Find videos &gt; 500 MB & free up space
-                </Text>
+              <View style={styles.rowBody}>
+                <Text style={[styles.rowLabel, { color: theme.text }]}>Storage Cleaner</Text>
+                <Text style={[styles.rowSublabel, { color: theme.textMuted }]}>Clean &gt; 500 MB videos & junk</Text>
               </View>
-              <View style={styles.rowRight}>
-                <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+              <View style={styles.rowEnd}>
+                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
               </View>
             </Pressable>
 
-            <View style={[styles.separator, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
-
-            {/* Slideshow */}
-            <Pressable
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              onPress={() => router.push({ pathname: '/slideshow', params: { source: 'all' } })}
-            >
-              <View style={[styles.iconContainer, { backgroundColor: '#F59E0B20' }]}>
-                <Ionicons name="play-circle-outline" size={20} color="#FBBF24" />
-              </View>
-              <View style={styles.rowContent}>
-                <Text style={[styles.rowTitle, { color: theme.text }]}>Slideshow Player</Text>
-                <Text style={[styles.rowSubtitle, { color: theme.textMuted }]}>
-                  Auto-advance through your memories
-                </Text>
-              </View>
-              <View style={styles.rowRight}>
-                <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
-              </View>
-            </Pressable>
-
-            <View style={[styles.separator, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
             {/* Recently Deleted */}
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               onPress={() => router.push('/trash')}
             >
-              <View style={[styles.iconContainer, { backgroundColor: '#F43F5E20' }]}>
-                <Ionicons name="trash-outline" size={20} color="#FB7185" />
+              <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
+                <Ionicons name="trash-outline" size={19} color={theme.text} />
               </View>
-              <View style={styles.rowContent}>
-                <Text style={[styles.rowTitle, { color: theme.text }]}>Recently Deleted</Text>
-                <Text style={[styles.rowSubtitle, { color: theme.textMuted }]}>
-                  30-day trash protection
-                </Text>
+              <View style={styles.rowBody}>
+                <Text style={[styles.rowLabel, { color: theme.text }]}>Recently Deleted</Text>
               </View>
-              <View style={styles.rowRight}>
+              <View style={styles.rowEnd}>
                 {trashCount > 0 && (
-                  <View style={[styles.counterBadge, { backgroundColor: '#F43F5E20' }]}>
-                    <Text style={[styles.counterText, { color: '#FB7185' }]}>{trashCount}</Text>
+                  <View style={[styles.countBadge, { backgroundColor: theme.card }]}>
+                    <Text style={[styles.countText, { color: theme.textMuted }]}>{trashCount}</Text>
                   </View>
                 )}
-                <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
               </View>
             </Pressable>
 
-            <View style={[styles.separator, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
             {/* Archive */}
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               onPress={() => router.push('/archive')}
             >
-              <View style={[styles.iconContainer, { backgroundColor: '#0EA5E920' }]}>
-                <Ionicons name="archive-outline" size={20} color="#38BDF8" />
+              <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
+                <Ionicons name="archive-outline" size={19} color={theme.text} />
               </View>
-              <View style={styles.rowContent}>
-                <Text style={[styles.rowTitle, { color: theme.text }]}>Archive</Text>
-                <Text style={[styles.rowSubtitle, { color: theme.textMuted }]}>
-                  Organize away from main timeline
-                </Text>
+              <View style={styles.rowBody}>
+                <Text style={[styles.rowLabel, { color: theme.text }]}>Archive</Text>
               </View>
-              <View style={styles.rowRight}>
+              <View style={styles.rowEnd}>
                 {archivedAssetIds.length > 0 && (
-                  <View style={[styles.counterBadge, { backgroundColor: '#0EA5E920' }]}>
-                    <Text style={[styles.counterText, { color: '#38BDF8' }]}>{archivedAssetIds.length}</Text>
+                  <View style={[styles.countBadge, { backgroundColor: theme.card }]}>
+                    <Text style={[styles.countText, { color: theme.textMuted }]}>{archivedAssetIds.length}</Text>
                   </View>
                 )}
-                <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+              </View>
+            </Pressable>
+
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
+            {/* Slideshow */}
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              onPress={() => router.push({ pathname: '/slideshow', params: { source: 'all' } })}
+            >
+              <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
+                <Ionicons name="play-outline" size={19} color={theme.text} />
+              </View>
+              <View style={styles.rowBody}>
+                <Text style={[styles.rowLabel, { color: theme.text }]}>Slideshow</Text>
+              </View>
+              <View style={styles.rowEnd}>
+                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
               </View>
             </Pressable>
           </View>
-        </View>
-
-        {/* SECTION: Preferences & System */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionHeader, { color: theme.textMuted }]}>SYSTEM & ABOUT</Text>
-          <View style={[styles.cardGroup, { backgroundColor: theme.surface }]}>
-            {/* Theme */}
-            <View style={styles.row}>
-              <View style={[styles.iconContainer, { backgroundColor: '#8B5CF620' }]}>
-                <Ionicons name="moon-outline" size={20} color="#A78BFA" />
-              </View>
-              <View style={styles.rowContent}>
-                <Text style={[styles.rowTitle, { color: theme.text }]}>Appearance</Text>
-                <Text style={[styles.rowSubtitle, { color: theme.textMuted }]}>
-                  OLED Deep Dark
-                </Text>
-              </View>
-              <View style={[styles.statusPill, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
-                <Text style={[styles.statusPillText, { color: theme.accent }]}>Dark</Text>
-              </View>
-            </View>
-
-            <View style={[styles.separator, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
-
-            {/* Media Permissions */}
-            <View style={styles.row}>
-              <View style={[styles.iconContainer, { backgroundColor: '#14B8A620' }]}>
-                <Ionicons name="key-outline" size={20} color="#2DD4BF" />
-              </View>
-              <View style={styles.rowContent}>
-                <Text style={[styles.rowTitle, { color: theme.text }]}>Media Permissions</Text>
-                <Text style={[styles.rowSubtitle, { color: theme.textMuted }]}>
-                  Android MediaStore Access
-                </Text>
-              </View>
-              <View style={[
-                styles.statusPill, 
-                { backgroundColor: permissionStatus === 'GRANTED' ? '#10B98120' : 'rgba(255,255,255,0.08)' }
-              ]}>
-                <Text style={[
-                  styles.statusPillText, 
-                  { color: permissionStatus === 'GRANTED' ? '#10B981' : theme.accent }
-                ]}>
-                  {permissionStatus === 'GRANTED' ? 'Granted' : permissionStatus}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Footer Guarantee */}
-        <View style={styles.footer}>
-          <Ionicons name="shield-checkmark-outline" size={16} color={theme.textMuted} style={styles.footerIcon} />
-          <Text style={[styles.footerText, { color: theme.textMuted }]}>
-            Pixora operates completely offline. No tracking, no cloud sync, your media remains 100% on your device.
-          </Text>
         </View>
       </ScrollView>
     </View>
@@ -327,175 +237,101 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 14,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   title: {
     fontSize: 32,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: -0.5,
   },
   scrollContent: {
     paddingHorizontal: 16,
   },
-  heroCard: {
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 20,
-    borderWidth: 1,
-  },
-  heroLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  heroIconBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    marginRight: 14,
-  },
-  heroTextContainer: {
-    flex: 1,
-  },
-  heroTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  heroTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  proBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  proBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  heroSubtitle: {
-    fontSize: 12,
-    marginTop: 4,
-    fontWeight: '400',
-  },
-  metricsBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  metricItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  metricValue: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  metricLabel: {
-    fontSize: 11,
-    marginTop: 2,
-    fontWeight: '500',
-  },
-  metricDivider: {
-    width: 1,
-    height: 22,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
   section: {
-    marginBottom: 22,
+    marginBottom: 26,
   },
-  sectionHeader: {
+  sectionTitle: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: 0.8,
     marginBottom: 8,
-    marginLeft: 4,
+    marginLeft: 6,
   },
-  cardGroup: {
-    borderRadius: 18,
+  card: {
+    borderRadius: 14,
+    borderWidth: 1,
     overflow: 'hidden',
+  },
+  themeSelectorContainer: {
+    flexDirection: 'row',
+    padding: 6,
+    gap: 6,
+  },
+  themeOptionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 6,
+  },
+  themeOptionBtnActive: {
+    borderWidth: 1,
+  },
+  themeOptionText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 13,
   },
   rowPressed: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    opacity: 0.7,
   },
-  iconContainer: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    justifyContent: 'center',
+  iconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 14,
   },
-  rowContent: {
+  rowBody: {
     flex: 1,
   },
-  rowTitle: {
+  rowLabel: {
     fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: -0.2,
+    fontWeight: '500',
   },
-  rowSubtitle: {
+  rowSublabel: {
     fontSize: 12,
     marginTop: 2,
-    lineHeight: 16,
   },
-  rowRight: {
+  rowEnd: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  statusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+  statusHint: {
+    fontSize: 14,
+    fontWeight: '500',
   },
-  statusPillText: {
+  countBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  countText: {
     fontSize: 12,
     fontWeight: '600',
   },
-  counterBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  counterText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  separator: {
-    height: 1,
-    marginLeft: 68,
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: 8,
-    marginTop: 4,
-    marginBottom: 16,
-  },
-  footerIcon: {
-    marginRight: 8,
-    marginTop: 2,
-  },
-  footerText: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 62,
   },
 });

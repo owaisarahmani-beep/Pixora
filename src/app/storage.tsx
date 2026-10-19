@@ -146,7 +146,7 @@ export default function StorageScreen() {
       <Stack.Screen 
         options={{ 
           title: 'Storage Cleaner', 
-          headerStyle: { backgroundColor: '#10151F' }, 
+          headerStyle: { backgroundColor: theme.background }, 
           headerTintColor: theme.text,
           headerShadowVisible: false,
         }} 
@@ -155,18 +155,18 @@ export default function StorageScreen() {
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
         
         {/* Storage Hero Banner */}
-        <View style={styles.heroCard}>
+        <View style={[styles.heroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.heroLeft}>
-            <View style={styles.heroIconBadge}>
-              <Ionicons name="pie-chart" size={26} color="#67E8F9" />
+            <View style={[styles.heroIconBadge, { backgroundColor: theme.accent + '1A' }]}>
+              <Ionicons name="pie-chart" size={26} color={theme.accent} />
             </View>
             <View>
-              <Text style={styles.heroLabel}>Large Videos Space</Text>
-              <Text style={styles.heroSizeText}>{formatBytes(totalLargeBytes)}</Text>
+              <Text style={[styles.heroLabel, { color: theme.textMuted }]}>Large Videos Space</Text>
+              <Text style={[styles.heroSizeText, { color: theme.text }]}>{formatBytes(totalLargeBytes)}</Text>
             </View>
           </View>
-          <View style={styles.thresholdPill}>
-            <Text style={styles.thresholdText}>{'>'} 500 MB each</Text>
+          <View style={[styles.thresholdPill, { backgroundColor: theme.card }]}>
+            <Text style={[styles.thresholdText, { color: theme.accent }]}>{'>'} 500 MB each</Text>
           </View>
         </View>
 
@@ -201,7 +201,7 @@ export default function StorageScreen() {
             {largeVideos.map(({ asset, sizeBytes }) => (
               <Pressable 
                 key={asset.id} 
-                style={[styles.videoCard, { backgroundColor: '#161D2B', borderColor: 'rgba(255,255,255,0.06)' }]}
+                style={[styles.videoCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
                 onPress={() => router.push(`/viewer/${asset.id}`)}
               >
                 {/* Thumbnail */}
@@ -246,7 +246,7 @@ export default function StorageScreen() {
 
         {/* Empty State */}
         {!isScanning && largeVideos.length === 0 && (
-          <View style={styles.emptyCard}>
+          <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.emptyIconCircle}>
               <Ionicons name="checkmark-done-circle" size={48} color="#34D399" />
             </View>
