@@ -123,6 +123,7 @@ export default function ViewerScreen() {
 
   const verticalDrag = Gesture.Pan()
     .enabled(!isZoomed)
+    .maxPointers(1)
     .activeOffsetY([-15, 15])
     .failOffsetX([-25, 25])
     .onUpdate((e) => {

@@ -28,11 +28,15 @@ export default function ZoomableView({ children }: Props) {
   const savedTranslateY = useSharedValue(0);
 
   const pinch = Gesture.Pinch()
+    .onStart(() => {
+      savedScale.value = scale.value;
+      runOnJS(setIsZoomed)(true);
+    })
     .onUpdate((event) => {
-      scale.value = savedScale.value * event.scale;
+      scale.value = Math.max(0.8, Math.min(savedScale.value * event.scale, 5));
     })
     .onEnd(() => {
-      if (scale.value <= 1) {
+      if (scale.value <= 1.05) {
         scale.value = withSpring(1);
         translateX.value = withSpring(0);
         translateY.value = withSpring(0);
@@ -48,6 +52,10 @@ export default function ZoomableView({ children }: Props) {
 
   const pan = Gesture.Pan()
     .enabled(isZoomed)
+    .onStart(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    })
     .onUpdate((event) => {
       if (scale.value > 1) {
         const maxTx = (width * scale.value - width) / 2;
