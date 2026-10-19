@@ -8,9 +8,11 @@ import PhotoGrid from '../../components/gallery/PhotoGrid';
 import { useVisibleMedia } from '../../hooks/useVisibleMedia';
 import { groupMediaByDate } from '../../utils/dateGrouping';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PhotosScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   
   // 1. All hooks must be at the top!
   const { 
@@ -101,40 +103,89 @@ export default function PhotosScreen() {
         </View>
       )}
       
-      {/* Top Search Bar */}
-      <Pressable 
-        style={[styles.searchBar, { backgroundColor: theme.surface }]} 
-        onPress={() => router.push('/search')}
-      >
-        <Ionicons name="search" size={20} color={theme.textMuted} />
-        <Text style={[styles.searchPlaceholder, { color: theme.textMuted }]}>Search your photos</Text>
-      </Pressable>
-      {/* Sort/Filter bar */}
-      <View style={[styles.filterBar, { backgroundColor: theme.background, borderBottomColor: theme.surface }]}>
+      {/* Top Floating Search Capsule (Google Photos style) */}
+      <View style={[styles.headerContainer, { paddingTop: insets.top + 8 }]}>
         <Pressable 
-          style={[styles.filterChip, filterType === 'all' && { backgroundColor: theme.accent }]}
-          onPress={() => setFilterType('all')}
+          style={[styles.searchBar, { backgroundColor: '#161D2B', borderColor: 'rgba(255, 255, 255, 0.08)' }]} 
+          onPress={() => router.push('/search')}
         >
-          <Text style={[styles.filterChipText, { color: filterType === 'all' ? '#FFF' : theme.textMuted }]}>All</Text>
+          <View style={styles.searchLeft}>
+            <View style={[styles.searchIconBg, { backgroundColor: 'rgba(103, 232, 249, 0.12)' }]}>
+              <Ionicons name="search" size={17} color={theme.accent} />
+            </View>
+            <Text style={[styles.searchPlaceholder, { color: '#8E9BAE' }]}>Search photos, albums & dates</Text>
+          </View>
+
+          {/* Quick Storage Cleaner / Shortcut */}
+          <Pressable 
+            style={styles.avatarPill} 
+            onPress={(e) => {
+              e.stopPropagation();
+              router.push('/storage');
+            }}
+          >
+            <Ionicons name="sparkles" size={16} color={theme.accent} />
+          </Pressable>
         </Pressable>
-        <Pressable 
-          style={[styles.filterChip, filterType === 'photo' && { backgroundColor: theme.accent }]}
-          onPress={() => setFilterType('photo')}
-        >
-          <Text style={[styles.filterChipText, { color: filterType === 'photo' ? '#FFF' : theme.textMuted }]}>Photos</Text>
-        </Pressable>
-        <Pressable 
-          style={[styles.filterChip, filterType === 'video' && { backgroundColor: theme.accent }]}
-          onPress={() => setFilterType('video')}
-        >
-          <Text style={[styles.filterChipText, { color: filterType === 'video' ? '#FFF' : theme.textMuted }]}>Videos</Text>
-        </Pressable>
-        <View style={{ flex: 1 }} />
+      </View>
+
+      {/* Filter Chips & Sort Row */}
+      <View style={[styles.filterBar, { borderBottomColor: 'rgba(255, 255, 255, 0.06)' }]}>
+        <View style={styles.filterChipGroup}>
+          <Pressable 
+            style={[
+              styles.filterChip, 
+              filterType === 'all' ? styles.filterChipActive : styles.filterChipInactive
+            ]}
+            onPress={() => setFilterType('all')}
+          >
+            <Ionicons 
+              name="grid-outline" 
+              size={13} 
+              color={filterType === 'all' ? '#0F172A' : '#94A3B8'} 
+              style={{ marginRight: 5 }} 
+            />
+            <Text style={[styles.filterChipText, filterType === 'all' && styles.filterChipTextActive]}>All</Text>
+          </Pressable>
+
+          <Pressable 
+            style={[
+              styles.filterChip, 
+              filterType === 'photo' ? styles.filterChipActive : styles.filterChipInactive
+            ]}
+            onPress={() => setFilterType('photo')}
+          >
+            <Ionicons 
+              name="camera-outline" 
+              size={13} 
+              color={filterType === 'photo' ? '#0F172A' : '#94A3B8'} 
+              style={{ marginRight: 5 }} 
+            />
+            <Text style={[styles.filterChipText, filterType === 'photo' && styles.filterChipTextActive]}>Photos</Text>
+          </Pressable>
+
+          <Pressable 
+            style={[
+              styles.filterChip, 
+              filterType === 'video' ? styles.filterChipActive : styles.filterChipInactive
+            ]}
+            onPress={() => setFilterType('video')}
+          >
+            <Ionicons 
+              name="videocam-outline" 
+              size={13} 
+              color={filterType === 'video' ? '#0F172A' : '#94A3B8'} 
+              style={{ marginRight: 5 }} 
+            />
+            <Text style={[styles.filterChipText, filterType === 'video' && styles.filterChipTextActive]}>Videos</Text>
+          </Pressable>
+        </View>
+
         <Pressable 
           style={styles.sortBtn}
           onPress={() => setSortOrder(s => s === 'newest' ? 'oldest' : 'newest')}
         >
-          <Ionicons name={sortOrder === 'newest' ? 'arrow-down' : 'arrow-up'} size={14} color={theme.textMuted} />
+          <Ionicons name={sortOrder === 'newest' ? 'arrow-down' : 'arrow-up'} size={13} color={theme.accent} />
           <Text style={[styles.sortText, { color: theme.textMuted }]}>{sortOrder === 'newest' ? 'Newest' : 'Oldest'}</Text>
         </Pressable>
       </View>
@@ -176,48 +227,98 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginRight: 12,
   },
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
-    paddingHorizontal: 16,
-    height: 44,
-    borderRadius: 22,
+    justifyContent: 'space-between',
+    paddingLeft: 8,
+    paddingRight: 8,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  searchLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  searchIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
   searchPlaceholder: {
-    marginLeft: 8,
-    fontSize: 15,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  avatarPill: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   filterBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 6,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  filterChipGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   filterChip: {
-    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: 'transparent',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#555',
+    borderRadius: 18,
+  },
+  filterChipActive: {
+    backgroundColor: '#67E8F9',
+  },
+  filterChipInactive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   filterChipText: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94A3B8',
+  },
+  filterChipTextActive: {
+    color: '#0F172A',
+    fontWeight: '700',
   },
   sortBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
   sortText: {
-    fontSize: 13,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

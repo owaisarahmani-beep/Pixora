@@ -115,11 +115,13 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
 const styles = StyleSheet.create({
   headerContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   headerText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   row: {
     flexDirection: 'row',
