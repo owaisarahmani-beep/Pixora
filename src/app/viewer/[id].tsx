@@ -67,7 +67,7 @@ export default function ViewerScreen() {
   const loadMoreMedia = isSearch || isFavorites ? () => {} : (isAlbum || isLockedAlbum) ? albumLoadMore : galleryLoadMore;
   const hasNextPage = isSearch || isFavorites ? false : (isAlbum || isLockedAlbum) ? albumHasNext : galleryHasNext;
 
-  const { isZoomed } = useViewerStore();
+  const { isZoomed, setDetailsVisible } = useViewerStore();
   
   const initialIndex = useMemo(() => {
     const idx = media.findIndex(m => m.id === id);
@@ -117,25 +117,40 @@ export default function ViewerScreen() {
     router.back();
   }, []);
 
+  const handleOpenDetails = useCallback(() => {
+    setDetailsVisible(true);
+  }, [setDetailsVisible]);
+
   const verticalDrag = Gesture.Pan()
     .enabled(!isZoomed)
-    .activeOffsetY([15, 1000])
+    .activeOffsetY([-15, 15])
     .failOffsetX([-25, 25])
     .onUpdate((e) => {
       'worklet';
       if (e.translationY > 0) {
+        // Dragging down (Dismiss gesture)
         translateY.value = e.translationY;
         translateX.value = e.translationX * 0.35;
         scale.value = Math.max(0.75, 1 - (e.translationY / 1200));
+      } else {
+        // Dragging up (Reveal details gesture)
+        translateY.value = e.translationY * 0.6;
+        scale.value = Math.max(0.92, 1 - (Math.abs(e.translationY) / 2000));
       }
     })
     .onEnd((e) => {
       'worklet';
       if (e.translationY > 120 || e.velocityY > 600) {
-        // Dragged down far enough or fast enough - animate offscreen and dismiss
+        // Dragged down far enough - dismiss to album/gallery
         translateY.value = withTiming(800, { duration: 200 }, () => {
           runOnJS(handleDismiss)();
         });
+      } else if (e.translationY < -60 || e.velocityY < -400) {
+        // Dragged up far enough - open details modal!
+        translateY.value = withSpring(0, { damping: 18, stiffness: 200 });
+        translateX.value = withSpring(0, { damping: 18, stiffness: 200 });
+        scale.value = withSpring(1, { damping: 18, stiffness: 200 });
+        runOnJS(handleOpenDetails)();
       } else {
         // Cancel - smoothly spring back into place
         translateY.value = withSpring(0, { damping: 18, stiffness: 200 });
@@ -145,12 +160,9 @@ export default function ViewerScreen() {
     });
 
   const backdropAnimatedStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(
-      translateY.value,
-      [0, 250],
-      [1, 0],
-      Extrapolation.CLAMP
-    );
+    const opacity = translateY.value > 0
+      ? interpolate(translateY.value, [0, 250], [1, 0], Extrapolation.CLAMP)
+      : 1;
     return {
       backgroundColor: `rgba(0, 0, 0, ${opacity})`,
     };
