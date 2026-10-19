@@ -1,5 +1,5 @@
-import React from 'react';
-import { StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect } from 'react';
+import { StyleSheet, useWindowDimensions } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -13,19 +13,32 @@ import { useViewerStore } from '../../store/useViewerStore';
 
 interface Props {
   children: React.ReactNode;
+  isActive?: boolean;
 }
 
-import { useWindowDimensions } from 'react-native';
-
-export default function ZoomableView({ children }: Props) {
+export default function ZoomableView({ children, isActive = true }: Props) {
   const { width, height } = useWindowDimensions();
   const { isZoomed, setIsZoomed, toggleControls } = useViewerStore();
+  
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const savedTranslateX = useSharedValue(0);
   const savedTranslateY = useSharedValue(0);
+
+  // If this page is no longer active (user swiped away), reset zoom state
+  useEffect(() => {
+    if (!isActive && scale.value !== 1) {
+      scale.value = 1;
+      savedScale.value = 1;
+      translateX.value = 0;
+      translateY.value = 0;
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
+      setIsZoomed(false);
+    }
+  }, [isActive, scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY, setIsZoomed]);
 
   const pinch = Gesture.Pinch()
     .onStart(() => {
@@ -52,6 +65,8 @@ export default function ZoomableView({ children }: Props) {
 
   const pan = Gesture.Pan()
     .enabled(isZoomed)
+    .activeOffsetX([-10, 10])
+    .activeOffsetY([-10, 10])
     .onStart(() => {
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
@@ -79,7 +94,7 @@ export default function ZoomableView({ children }: Props) {
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
     .onEnd(() => {
-      if (scale.value > 1) {
+      if (scale.value > 1.05) {
         scale.value = withTiming(1);
         translateX.value = withTiming(0);
         translateY.value = withTiming(0);
@@ -96,6 +111,7 @@ export default function ZoomableView({ children }: Props) {
 
   const singleTap = Gesture.Tap()
     .numberOfTaps(1)
+    .maxDuration(250)
     .onEnd(() => {
       runOnJS(toggleControls)();
     });

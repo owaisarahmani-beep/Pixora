@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useCallback } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { View, StyleSheet, Text, Platform } from 'react-native';
 import { useLocalSearchParams, Stack, router } from 'expo-router';
 import PagerView from 'react-native-pager-view';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -16,7 +16,6 @@ import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as NavigationBar from 'expo-navigation-bar';
-import { Platform } from 'react-native';
 import { useMediaStore } from '../../store/useMediaStore';
 import { useViewerStore } from '../../store/useViewerStore';
 import { PixoraMediaInfo } from '../../services/media/mediaTypes';
@@ -31,6 +30,7 @@ import { useAuthorizedMedia, MediaContext } from '../../hooks/useVisibleMedia';
 
 export default function ViewerScreen() {
   const { id, source } = useLocalSearchParams();
+  const pagerRef = useRef<PagerView>(null);
   
   const galleryMedia = useMediaStore(state => state.media);
   const galleryLoadMore = useMediaStore(state => state.loadMoreMedia);
@@ -67,7 +67,7 @@ export default function ViewerScreen() {
   const loadMoreMedia = isSearch || isFavorites ? () => {} : (isAlbum || isLockedAlbum) ? albumLoadMore : galleryLoadMore;
   const hasNextPage = isSearch || isFavorites ? false : (isAlbum || isLockedAlbum) ? albumHasNext : galleryHasNext;
 
-  const { isZoomed, setDetailsVisible } = useViewerStore();
+  const { isZoomed, setIsZoomed, setDetailsVisible } = useViewerStore();
   
   const initialIndex = useMemo(() => {
     const idx = media.findIndex(m => m.id === id);
@@ -76,7 +76,15 @@ export default function ViewerScreen() {
 
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
-  React.useEffect(() => {
+  // Guarantee isZoomed is clean on mount and unmount
+  useEffect(() => {
+    setIsZoomed(false);
+    return () => {
+      setIsZoomed(false);
+    };
+  }, [setIsZoomed]);
+
+  useEffect(() => {
     ScreenOrientation.unlockAsync();
     if (Platform.OS === 'android') {
       NavigationBar.setVisibilityAsync('hidden').catch(() => {});
@@ -103,6 +111,8 @@ export default function ViewerScreen() {
   const handlePageSelected = (e: any) => {
     const newIndex = e.nativeEvent.position;
     setCurrentIndex(newIndex);
+    // Reset zoom when swiping to any page
+    setIsZoomed(false);
     
     if (newIndex >= media.length - 10 && hasNextPage) {
       loadMoreMedia();
@@ -121,17 +131,21 @@ export default function ViewerScreen() {
     setDetailsVisible(true);
   }, [setDetailsVisible]);
 
+  // Vertical drag handler for dismiss (down) and details (up).
+  // Configured with tight failOffsetX so any horizontal swipe immediately
+  // yields control to PagerView for seamless sliding between images!
   const verticalDrag = Gesture.Pan()
     .enabled(!isZoomed)
     .maxPointers(1)
-    .activeOffsetY([-15, 15])
-    .failOffsetX([-25, 25])
+    .activeOffsetY([-30, 30])
+    .failOffsetX([-10, 10])
+    .cancelsTouchesInView(false)
     .onUpdate((e) => {
       'worklet';
       if (e.translationY > 0) {
         // Dragging down (Dismiss gesture)
         translateY.value = e.translationY;
-        translateX.value = e.translationX * 0.35;
+        translateX.value = e.translationX * 0.25;
         scale.value = Math.max(0.75, 1 - (e.translationY / 1200));
       } else {
         // Dragging up (Reveal details gesture)
@@ -188,7 +202,6 @@ export default function ViewerScreen() {
     );
     return {
       opacity,
-      pointerEvents: translateY.value > 10 ? ('none' as const) : ('auto' as const),
     };
   });
 
@@ -199,10 +212,12 @@ export default function ViewerScreen() {
         
         <Animated.View style={[styles.pagerContainer, contentAnimatedStyle]}>
           <PagerView
+            ref={pagerRef}
             style={styles.pager}
             initialPage={initialIndex}
             onPageSelected={handlePageSelected}
             scrollEnabled={!isZoomed}
+            offscreenPageLimit={1}
           >
             {media.map((item, index) => {
               if (Math.abs(index - currentIndex) > 2) {
@@ -213,7 +228,11 @@ export default function ViewerScreen() {
           </PagerView>
         </Animated.View>
 
-        <Animated.View style={[StyleSheet.absoluteFill, controlsAnimatedStyle]}>
+        {/* Controls Overlay with pointerEvents="box-none" so PagerView receives all horizontal swipes */}
+        <Animated.View 
+          style={[StyleSheet.absoluteFill, controlsAnimatedStyle]} 
+          pointerEvents="box-none"
+        >
           <ViewerControls item={currentMedia} />
           <MediaDetailsModal item={currentMedia} />
         </Animated.View>
@@ -227,19 +246,17 @@ const MediaPage = React.memo(({ item, isActive }: { item: PixoraMediaInfo, isAct
     return <VideoPage item={item} isActive={isActive} />;
   }
 
-  return <PhotoPage item={item} />;
+  return <PhotoPage item={item} isActive={isActive} />;
 });
 MediaPage.displayName = 'MediaPage';
 
-// BUG #1 FIX: Extracted video logic. NO Gesture wrapper.
-// This allows native expo-video controls to absorb and process all tap/seek events.
 const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolean }) => {
   const player = useVideoPlayer(item.uri, (p) => {
     p.loop = true;
   });
 
   // Pause when swiping away
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isActive && player.playing) {
       player.pause();
     }
@@ -266,10 +283,10 @@ const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolea
   );
 };
 
-const PhotoPage = ({ item }: { item: PixoraMediaInfo }) => {
+const PhotoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolean }) => {
   return (
     <View style={styles.page}>
-      <ZoomableView>
+      <ZoomableView isActive={isActive}>
         <Image
           source={{ uri: item.uri }}
           style={styles.media}
