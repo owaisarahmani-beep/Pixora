@@ -1,134 +1,261 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  Pressable, 
+  ActivityIndicator, 
+  Alert 
+} from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useTheme } from '../theme/ThemeProvider';
 import { useMediaStore } from '../store/useMediaStore';
 import { PixoraMediaInfo } from '../services/media/mediaTypes';
-import { Image } from 'expo-image';
+
+const LARGE_VIDEO_THRESHOLD_BYTES = 500 * 1024 * 1024; // 500 MB
+
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function formatDuration(seconds: number): string {
+  if (!seconds || seconds <= 0) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+interface VideoSizeInfo {
+  asset: PixoraMediaInfo;
+  sizeBytes: number;
+}
 
 export default function StorageScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const media = useMediaStore(state => state.media);
+  const { media, deleteMediaAsync } = useMediaStore();
 
-  // Simple heuristic duplicate detection: Same width, height, and creationTime (within 1 second)
-  const duplicates = useMemo(() => {
-    const groups = new Map<string, PixoraMediaInfo[]>();
-    
-    media.forEach(m => {
-      // Group by exact resolution + time rounded to nearest second
-      const timeKey = Math.floor(m.creationTime / 1000);
-      const key = `${m.width}x${m.height}_${timeKey}`;
-      
-      if (!groups.has(key)) {
-        groups.set(key, []);
-      }
-      groups.get(key)!.push(m);
-    });
+  const [isScanning, setIsScanning] = useState(true);
+  const [videoSizes, setVideoSizes] = useState<Map<string, number>>(new Map());
 
-    const duplicateGroups: PixoraMediaInfo[][] = [];
-    groups.forEach(assets => {
-      if (assets.length > 1) {
-        duplicateGroups.push(assets);
-      }
-    });
-
-    return duplicateGroups;
+  // Filter all video assets
+  const allVideos = useMemo(() => {
+    return media.filter(m => m.mediaType === 'video');
   }, [media]);
 
-  const largeVideos = useMemo(() => {
-    // For local dev, we don't have file size, so let's flag videos over 60 seconds as "Large"
-    return media.filter(m => m.mediaType === 'video' && m.duration > 60)
-                .sort((a, b) => b.duration - a.duration);
-  }, [media]);
+  // Scan file sizes for all videos
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function scanVideoSizes() {
+      setIsScanning(true);
+      const sizesMap = new Map<string, number>();
+
+      for (const video of allVideos) {
+        if (isCancelled) break;
+        try {
+          const info = await FileSystem.getInfoAsync(video.uri);
+          if (info.exists && info.size && info.size > 0) {
+            sizesMap.set(video.id, info.size);
+          } else {
+            // Fallback estimation if OS ContentResolver doesn't expose size directly:
+            // ~35 Mbps average bitrate for mobile 1080p/4K video (~4.4 MB per second)
+            const estimatedBytes = video.duration > 0 ? video.duration * 4.4 * 1024 * 1024 : 0;
+            if (estimatedBytes >= LARGE_VIDEO_THRESHOLD_BYTES) {
+              sizesMap.set(video.id, estimatedBytes);
+            }
+          }
+        } catch {
+          // If query fails, estimate based on duration
+          const estimatedBytes = video.duration > 0 ? video.duration * 4.4 * 1024 * 1024 : 0;
+          if (estimatedBytes >= LARGE_VIDEO_THRESHOLD_BYTES) {
+            sizesMap.set(video.id, estimatedBytes);
+          }
+        }
+      }
+
+      if (!isCancelled) {
+        setVideoSizes(sizesMap);
+        setIsScanning(false);
+      }
+    }
+
+    scanVideoSizes();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [allVideos]);
+
+  // Filter videos that exceed the 500 MB threshold
+  const largeVideos: VideoSizeInfo[] = useMemo(() => {
+    const list: VideoSizeInfo[] = [];
+
+    allVideos.forEach(v => {
+      const sizeBytes = videoSizes.get(v.id) || 0;
+      if (sizeBytes >= LARGE_VIDEO_THRESHOLD_BYTES) {
+        list.push({ asset: v, sizeBytes });
+      }
+    });
+
+    // Sort by largest first
+    return list.sort((a, b) => b.sizeBytes - a.sizeBytes);
+  }, [allVideos, videoSizes]);
+
+  // Total size occupied by large videos
+  const totalLargeBytes = useMemo(() => {
+    return largeVideos.reduce((acc, curr) => acc + curr.sizeBytes, 0);
+  }, [largeVideos]);
+
+  // Handle delete / move to trash
+  const handleDelete = useCallback((item: VideoSizeInfo) => {
+    Alert.alert(
+      'Move to Trash',
+      `Move "${item.asset.filename || 'this video'}" (${formatBytes(item.sizeBytes)}) to Recently Deleted? You can recover it within 30 days.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Move to Trash', 
+          style: 'destructive',
+          onPress: async () => {
+            const success = await deleteMediaAsync(item.asset.id);
+            if (success) {
+              setVideoSizes(prev => {
+                const next = new Map(prev);
+                next.delete(item.asset.id);
+                return next;
+              });
+            }
+          }
+        }
+      ]
+    );
+  }, [deleteMediaAsync]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Stack.Screen options={{ title: 'Storage Cleaner', headerStyle: { backgroundColor: theme.background }, headerTintColor: theme.text }} />
+      <Stack.Screen 
+        options={{ 
+          title: 'Storage Cleaner', 
+          headerStyle: { backgroundColor: '#10151F' }, 
+          headerTintColor: theme.text,
+          headerShadowVisible: false,
+        }} 
+      />
       
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
         
-        {/* Duplicates Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="copy-outline" size={24} color={theme.text} />
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Duplicate Photos</Text>
-            <View style={{ flex: 1 }} />
-            <Text style={[styles.sectionCount, { color: theme.textMuted }]}>
-              {duplicates.length} groups found
-            </Text>
+        {/* Storage Hero Banner */}
+        <View style={styles.heroCard}>
+          <View style={styles.heroLeft}>
+            <View style={styles.heroIconBadge}>
+              <Ionicons name="pie-chart" size={26} color="#67E8F9" />
+            </View>
+            <View>
+              <Text style={styles.heroLabel}>Large Videos Space</Text>
+              <Text style={styles.heroSizeText}>{formatBytes(totalLargeBytes)}</Text>
+            </View>
           </View>
-          
-          <Text style={[styles.sectionDesc, { color: theme.textMuted }]}>
-            Photos taken at the exact same time with the same resolution.
-          </Text>
-
-          {duplicates.map((group, index) => (
-            <View key={index} style={[styles.duplicateGroup, { backgroundColor: theme.surface }]}>
-              {group.map((item, i) => (
-                <Pressable 
-                  key={item.id} 
-                  style={styles.duplicateItem}
-                  onPress={() => router.push(`/viewer/${item.id}`)}
-                >
-                  <Image source={{ uri: item.uri }} style={styles.thumb} contentFit="cover" />
-                  {i > 0 && (
-                    <View style={styles.duplicateBadge}>
-                      <Text style={styles.duplicateBadgeText}>Delete Copy</Text>
-                    </View>
-                  )}
-                </Pressable>
-              ))}
-            </View>
-          ))}
-          
-          {duplicates.length === 0 && (
-            <View style={styles.emptyBox}>
-              <Ionicons name="checkmark-circle-outline" size={32} color={theme.accent} />
-              <Text style={[styles.emptyText, { color: theme.textMuted }]}>No duplicates found!</Text>
-            </View>
-          )}
+          <View style={styles.thresholdPill}>
+            <Text style={styles.thresholdText}>{'>'} 500 MB each</Text>
+          </View>
         </View>
 
-        {/* Large Videos Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="videocam-outline" size={24} color={theme.text} />
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Large Videos</Text>
-            <View style={{ flex: 1 }} />
-            <Text style={[styles.sectionCount, { color: theme.textMuted }]}>
-              {largeVideos.length} found
+        {/* Section Header */}
+        <View style={styles.sectionHeaderRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="videocam" size={20} color={theme.accent} />
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Videos Over 500 MB</Text>
+          </View>
+          <Text style={[styles.sectionCountBadge, { color: theme.textMuted }]}>
+            {isScanning ? 'Scanning...' : `${largeVideos.length} found`}
+          </Text>
+        </View>
+
+        <Text style={[styles.sectionDesc, { color: theme.textMuted }]}>
+          These high-resolution or long videos consume significant device storage. Review and clean them up to free up space.
+        </Text>
+
+        {/* Scanning State */}
+        {isScanning && (
+          <View style={styles.scanningBox}>
+            <ActivityIndicator size="small" color={theme.accent} />
+            <Text style={[styles.scanningText, { color: theme.textMuted }]}>
+              Calculating video file sizes...
             </Text>
           </View>
-          
-          <Text style={[styles.sectionDesc, { color: theme.textMuted }]}>
-            Videos longer than 60 seconds that might be taking up space.
-          </Text>
+        )}
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.largeVideosScroll}>
-            {largeVideos.map(video => (
+        {/* Large Videos List */}
+        {!isScanning && largeVideos.length > 0 && (
+          <View style={styles.videoList}>
+            {largeVideos.map(({ asset, sizeBytes }) => (
               <Pressable 
-                key={video.id} 
-                style={styles.largeVideoCard}
-                onPress={() => router.push(`/viewer/${video.id}`)}
+                key={asset.id} 
+                style={[styles.videoCard, { backgroundColor: '#161D2B', borderColor: 'rgba(255,255,255,0.06)' }]}
+                onPress={() => router.push(`/viewer/${asset.id}`)}
               >
-                <Image source={{ uri: video.uri }} style={styles.largeVideoThumb} contentFit="cover" />
-                <View style={styles.durationBadge}>
-                  <Text style={styles.durationText}>{Math.floor(video.duration / 60)}:{(Math.floor(video.duration % 60)).toString().padStart(2, '0')}</Text>
+                {/* Thumbnail */}
+                <View style={styles.thumbnailWrapper}>
+                  <Image source={{ uri: asset.uri }} style={styles.thumbnail} contentFit="cover" />
+                  <View style={styles.durationPill}>
+                    <Ionicons name="play" size={10} color="#FFF" style={{ marginRight: 2 }} />
+                    <Text style={styles.durationText}>{formatDuration(asset.duration)}</Text>
+                  </View>
                 </View>
+
+                {/* Details */}
+                <View style={styles.detailsWrapper}>
+                  <Text style={[styles.videoTitle, { color: theme.text }]} numberOfLines={1}>
+                    {asset.filename || 'Untitled Video'}
+                  </Text>
+                  
+                  <View style={styles.metaRow}>
+                    <View style={styles.sizeBadge}>
+                      <Text style={styles.sizeText}>{formatBytes(sizeBytes)}</Text>
+                    </View>
+                    {asset.width > 0 && (
+                      <Text style={[styles.resolutionText, { color: theme.textMuted }]}>
+                        {asset.width}×{asset.height}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+
+                {/* Trash Action */}
+                <Pressable 
+                  style={styles.deleteBtn}
+                  onPress={() => handleDelete({ asset, sizeBytes })}
+                  hitSlop={12}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#F87171" />
+                </Pressable>
               </Pressable>
             ))}
-          </ScrollView>
-          
-          {largeVideos.length === 0 && (
-            <View style={styles.emptyBox}>
-              <Ionicons name="checkmark-circle-outline" size={32} color={theme.accent} />
-              <Text style={[styles.emptyText, { color: theme.textMuted }]}>No large videos found!</Text>
+          </View>
+        )}
+
+        {/* Empty State */}
+        {!isScanning && largeVideos.length === 0 && (
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="checkmark-done-circle" size={48} color="#34D399" />
             </View>
-          )}
-        </View>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>No Videos Over 500 MB</Text>
+            <Text style={[styles.emptyDesc, { color: theme.textMuted }]}>
+              None of your videos exceed the 500 MB threshold. Your storage is clean and optimized!
+            </Text>
+          </View>
+        )}
 
       </ScrollView>
     </View>
@@ -136,68 +263,197 @@ export default function StorageScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: 16 },
-  section: { marginBottom: 32 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold' },
-  sectionCount: { fontSize: 14, fontWeight: '500' },
-  sectionDesc: { fontSize: 13, marginBottom: 16 },
-  duplicateGroup: {
+  container: { 
+    flex: 1 
+  },
+  content: { 
+    padding: 16 
+  },
+  heroCard: {
+    backgroundColor: '#161E2E',
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 24,
     flexDirection: 'row',
-    padding: 8,
-    borderRadius: 12,
-    marginBottom: 12,
-    gap: 8,
-  },
-  duplicateItem: {
-    flex: 1,
-    height: 120,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  thumb: { width: '100%', height: '100%' },
-  duplicateBadge: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    right: 8,
-    backgroundColor: '#EF4444',
-    paddingVertical: 4,
-    borderRadius: 4,
     alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(103, 232, 249, 0.15)',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
-  duplicateBadgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
-  emptyBox: {
+  heroLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  heroIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(103, 232, 249, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
-    borderWidth: 1,
-    borderColor: '#333',
+  },
+  heroLabel: {
+    color: '#8E9BAE',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  heroSizeText: {
+    color: '#FFF',
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  thresholdPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
-    borderStyle: 'dashed',
   },
-  emptyText: { marginTop: 12, fontSize: 14 },
-  largeVideosScroll: {
-    marginHorizontal: -16,
-    paddingHorizontal: 16,
+  thresholdText: {
+    color: '#67E8F9',
+    fontSize: 11,
+    fontWeight: '600',
   },
-  largeVideoCard: {
-    width: 140,
-    height: 180,
-    marginRight: 12,
+  sectionHeaderRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  sectionTitle: { 
+    fontSize: 18, 
+    fontWeight: '700' 
+  },
+  sectionCountBadge: { 
+    fontSize: 13, 
+    fontWeight: '600' 
+  },
+  sectionDesc: { 
+    fontSize: 13, 
+    lineHeight: 18,
+    marginBottom: 16 
+  },
+  scanningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    gap: 10,
+  },
+  scanningText: {
+    fontSize: 13,
+  },
+  videoList: {
+    gap: 12,
+  },
+  videoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  thumbnailWrapper: {
+    width: 80,
+    height: 80,
     borderRadius: 12,
     overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#0F172A',
   },
-  largeVideoThumb: { width: '100%', height: '100%' },
-  durationBadge: {
+  thumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  durationPill: {
     position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 6,
+    bottom: 4,
+    right: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    paddingHorizontal: 5,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
   },
-  durationText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
+  durationText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  detailsWrapper: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'center',
+  },
+  videoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sizeBadge: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  sizeText: {
+    color: '#F87171',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  resolutionText: {
+    fontSize: 11,
+  },
+  deleteBtn: {
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(248, 113, 113, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  emptyCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+    backgroundColor: '#161E2E',
+    borderRadius: 20,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  emptyIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(52, 211, 153, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  emptyDesc: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
 });
