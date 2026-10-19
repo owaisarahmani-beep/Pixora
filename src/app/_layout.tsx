@@ -3,12 +3,26 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import PrivacyGuard from '../components/privacy/PrivacyGuard';
+import { NavigationBar } from 'expo-navigation-bar';
+import { Platform } from 'react-native';
+import { useEffect } from 'react';
 
 export default function RootLayout() {
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      try {
+        NavigationBar.setHidden(true);
+      } catch (e) {
+        console.warn('Failed to set NavigationBar', e);
+      }
+    }
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <StatusBar style="light" />
+        {Platform.OS === 'android' && <NavigationBar hidden={true} />}
         <PrivacyGuard>
           <Stack
             screenOptions={{
