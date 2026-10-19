@@ -1,9 +1,17 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
-import { useLocalSearchParams, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack, router } from 'expo-router';
 import PagerView from 'react-native-pager-view';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
+import Animated, { 
+  useSharedValue, 
+  useAnimatedStyle, 
+  withTiming, 
+  withSpring, 
+  interpolate, 
+  Extrapolation, 
+  runOnJS 
+} from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -101,39 +109,102 @@ export default function ViewerScreen() {
     }
   };
 
-  const router = require('expo-router').router;
+  const translateY = useSharedValue(0);
+  const translateX = useSharedValue(0);
+  const scale = useSharedValue(1);
 
-  const verticalSwipe = Gesture.Pan()
-    .activeOffsetY([-20, 20])
-    .failOffsetX([-20, 20])
+  const handleDismiss = useCallback(() => {
+    router.back();
+  }, []);
+
+  const verticalDrag = Gesture.Pan()
+    .enabled(!isZoomed)
+    .activeOffsetY([15, 1000])
+    .failOffsetX([-25, 25])
+    .onUpdate((e) => {
+      'worklet';
+      if (e.translationY > 0) {
+        translateY.value = e.translationY;
+        translateX.value = e.translationX * 0.35;
+        scale.value = Math.max(0.75, 1 - (e.translationY / 1200));
+      }
+    })
     .onEnd((e) => {
-      if (Math.abs(e.velocityY) > 500 || Math.abs(e.translationY) > 100) {
-        runOnJS(router.back)();
+      'worklet';
+      if (e.translationY > 120 || e.velocityY > 600) {
+        // Dragged down far enough or fast enough - animate offscreen and dismiss
+        translateY.value = withTiming(800, { duration: 200 }, () => {
+          runOnJS(handleDismiss)();
+        });
+      } else {
+        // Cancel - smoothly spring back into place
+        translateY.value = withSpring(0, { damping: 18, stiffness: 200 });
+        translateX.value = withSpring(0, { damping: 18, stiffness: 200 });
+        scale.value = withSpring(1, { damping: 18, stiffness: 200 });
       }
     });
 
+  const backdropAnimatedStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      translateY.value,
+      [0, 250],
+      [1, 0],
+      Extrapolation.CLAMP
+    );
+    return {
+      backgroundColor: `rgba(0, 0, 0, ${opacity})`,
+    };
+  });
+
+  const contentAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateY: translateY.value },
+        { translateX: translateX.value },
+        { scale: scale.value },
+      ],
+    };
+  });
+
+  const controlsAnimatedStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      translateY.value,
+      [0, 80],
+      [1, 0],
+      Extrapolation.CLAMP
+    );
+    return {
+      opacity,
+      pointerEvents: translateY.value > 10 ? ('none' as const) : ('auto' as const),
+    };
+  });
+
   return (
-    <GestureDetector gesture={verticalSwipe}>
-      <View style={styles.container}>
+    <GestureDetector gesture={verticalDrag}>
+      <Animated.View style={[styles.container, backdropAnimatedStyle]}>
         <Stack.Screen options={{ headerShown: false, animation: 'fade' }} />
         
-        <PagerView
-          style={styles.pager}
-          initialPage={initialIndex}
-          onPageSelected={handlePageSelected}
-          scrollEnabled={!isZoomed}
-        >
-          {media.map((item, index) => {
-            if (Math.abs(index - currentIndex) > 2) {
-              return <View key={item.id} />;
-            }
-            return <MediaPage key={item.id} item={item} isActive={index === currentIndex} />;
-          })}
-        </PagerView>
+        <Animated.View style={[styles.pagerContainer, contentAnimatedStyle]}>
+          <PagerView
+            style={styles.pager}
+            initialPage={initialIndex}
+            onPageSelected={handlePageSelected}
+            scrollEnabled={!isZoomed}
+          >
+            {media.map((item, index) => {
+              if (Math.abs(index - currentIndex) > 2) {
+                return <View key={item.id} />;
+              }
+              return <MediaPage key={item.id} item={item} isActive={index === currentIndex} />;
+            })}
+          </PagerView>
+        </Animated.View>
 
-        <ViewerControls item={currentMedia} />
-        <MediaDetailsModal item={currentMedia} />
-      </View>
+        <Animated.View style={[StyleSheet.absoluteFill, controlsAnimatedStyle]}>
+          <ViewerControls item={currentMedia} />
+          <MediaDetailsModal item={currentMedia} />
+        </Animated.View>
+      </Animated.View>
     </GestureDetector>
   );
 }
@@ -201,6 +272,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
+  },
+  pagerContainer: {
+    flex: 1,
   },
   pager: {
     flex: 1,
