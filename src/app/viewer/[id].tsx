@@ -15,7 +15,6 @@ import Animated, {
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import * as NavigationBar from 'expo-navigation-bar';
 import { useMediaStore } from '../../store/useMediaStore';
 import { useViewerStore } from '../../store/useViewerStore';
 import { PixoraMediaInfo } from '../../services/media/mediaTypes';
@@ -85,14 +84,20 @@ export default function ViewerScreen() {
   }, [setIsZoomed]);
 
   useEffect(() => {
-    ScreenOrientation.unlockAsync();
+    ScreenOrientation.unlockAsync().catch(() => {});
     if (Platform.OS === 'android') {
-      NavigationBar.setVisibilityAsync('hidden').catch(() => {});
+      try {
+        const NavigationBar = require('expo-navigation-bar');
+        NavigationBar?.setVisibilityAsync?.('hidden')?.catch(() => {});
+      } catch (e) {}
     }
     return () => {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
       if (Platform.OS === 'android') {
-        NavigationBar.setVisibilityAsync('visible').catch(() => {});
+        try {
+          const NavigationBar = require('expo-navigation-bar');
+          NavigationBar?.setVisibilityAsync?.('visible')?.catch(() => {});
+        } catch (e) {}
       }
     };
   }, []);
