@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -178,6 +179,17 @@ export default function SettingsScreen() {
             </Pressable>
           </View>
         </View>
+
+        {/* Brand Showcase Footer */}
+        <View style={styles.brandFooter}>
+          <Image
+            source={require('../../../assets/icon.png')}
+            style={styles.brandLogo}
+            contentFit="cover"
+          />
+          <Text style={[styles.brandName, { color: theme.text }]}>Pixora</Text>
+          <Text style={[styles.brandVersion, { color: theme.textMuted }]}>Version 1.0.0</Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -285,5 +297,25 @@ const styles = StyleSheet.create({
   divider: {
     height: StyleSheet.hairlineWidth,
     marginLeft: 62,
+  },
+  brandFooter: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 4,
+  },
+  brandLogo: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    marginBottom: 6,
+  },
+  brandName: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  brandVersion: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
