@@ -19,7 +19,14 @@ import { PixoraMediaInfo } from '../services/media/mediaTypes';
 import DeleteConfirmModal from '../components/common/DeleteConfirmModal';
 import EmptyStateView from '../components/common/EmptyStateView';
 
-const LARGE_VIDEO_THRESHOLD_BYTES = 500 * 1024 * 1024; // 500 MB
+const THRESHOLD_OPTIONS = [
+  { label: '> 50 MB', value: 50 * 1024 * 1024 },
+  { label: '> 100 MB', value: 100 * 1024 * 1024 },
+  { label: '> 250 MB', value: 250 * 1024 * 1024 },
+  { label: '> 500 MB', value: 500 * 1024 * 1024 },
+];
+
+const DEFAULT_THRESHOLD_BYTES = 100 * 1024 * 1024; // 100 MB (Industry Standard Sweet Spot)
 
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return '0 B';
@@ -48,6 +55,7 @@ export default function StorageScreen() {
 
   const [isScanning, setIsScanning] = useState(true);
   const [videoSizes, setVideoSizes] = useState<Map<string, number>>(new Map());
+  const [selectedThreshold, setSelectedThreshold] = useState<number>(DEFAULT_THRESHOLD_BYTES);
   const [deleteTarget, setDeleteTarget] = useState<VideoSizeInfo | null>(null);
 
   // Filter all video assets
@@ -73,16 +81,12 @@ export default function StorageScreen() {
             // Fallback estimation if OS ContentResolver doesn't expose size directly:
             // ~35 Mbps average bitrate for mobile 1080p/4K video (~4.4 MB per second)
             const estimatedBytes = video.duration > 0 ? video.duration * 4.4 * 1024 * 1024 : 0;
-            if (estimatedBytes >= LARGE_VIDEO_THRESHOLD_BYTES) {
-              sizesMap.set(video.id, estimatedBytes);
-            }
+            sizesMap.set(video.id, estimatedBytes);
           }
         } catch {
           // If query fails, estimate based on duration
           const estimatedBytes = video.duration > 0 ? video.duration * 4.4 * 1024 * 1024 : 0;
-          if (estimatedBytes >= LARGE_VIDEO_THRESHOLD_BYTES) {
-            sizesMap.set(video.id, estimatedBytes);
-          }
+          sizesMap.set(video.id, estimatedBytes);
         }
       }
 
@@ -99,20 +103,20 @@ export default function StorageScreen() {
     };
   }, [allVideos]);
 
-  // Filter videos that exceed the 500 MB threshold
+  // Filter videos that exceed the selected threshold
   const largeVideos: VideoSizeInfo[] = useMemo(() => {
     const list: VideoSizeInfo[] = [];
 
     allVideos.forEach(v => {
       const sizeBytes = videoSizes.get(v.id) || 0;
-      if (sizeBytes >= LARGE_VIDEO_THRESHOLD_BYTES) {
+      if (sizeBytes >= selectedThreshold) {
         list.push({ asset: v, sizeBytes });
       }
     });
 
     // Sort by largest first
     return list.sort((a, b) => b.sizeBytes - a.sizeBytes);
-  }, [allVideos, videoSizes]);
+  }, [allVideos, videoSizes, selectedThreshold]);
 
   // Total size occupied by large videos
   const totalLargeBytes = useMemo(() => {
@@ -163,15 +167,44 @@ export default function StorageScreen() {
             </View>
           </View>
           <View style={[styles.thresholdPill, { backgroundColor: theme.card }]}>
-            <Text style={[styles.thresholdText, { color: theme.accent }]}>{'>'} 500 MB each</Text>
+            <Text style={[styles.thresholdText, { color: theme.accent }]}>{'>'} {formatBytes(selectedThreshold)} each</Text>
           </View>
+        </View>
+
+        {/* Quick Filter Threshold Pills */}
+        <View style={styles.filterPillsRow}>
+          {THRESHOLD_OPTIONS.map((opt) => {
+            const isSelected = selectedThreshold === opt.value;
+            return (
+              <Pressable
+                key={opt.value}
+                style={[
+                  styles.filterPill,
+                  {
+                    backgroundColor: isSelected ? theme.accent : theme.surface,
+                    borderColor: isSelected ? theme.accent : theme.border,
+                  },
+                ]}
+                onPress={() => setSelectedThreshold(opt.value)}
+              >
+                <Text
+                  style={[
+                    styles.filterPillText,
+                    { color: isSelected ? '#FFFFFF' : theme.textMuted, fontWeight: isSelected ? '700' : '500' },
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* Section Header */}
         <View style={styles.sectionHeaderRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Ionicons name="videocam" size={20} color={theme.accent} />
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Videos Over 500 MB</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Videos Over {formatBytes(selectedThreshold)}</Text>
           </View>
           <Text style={[styles.sectionCountBadge, { color: theme.textMuted }]}>
             {isScanning ? 'Scanning...' : `${largeVideos.length} found`}
@@ -246,7 +279,7 @@ export default function StorageScreen() {
           <EmptyStateView
             icon="checkmark-done-circle-outline"
             title="Storage is Optimized"
-            description="No videos over 500 MB were found on your device."
+            description={`No videos over ${formatBytes(selectedThreshold)} were found on your device.`}
             actionLabel="Return to Gallery"
             onAction={() => router.back()}
           />
@@ -278,7 +311,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#161E2E',
     borderRadius: 20,
     padding: 18,
-    marginBottom: 24,
+    marginBottom: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -289,6 +322,23 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
+  },
+  filterPillsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 22,
+  },
+  filterPill: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterPillText: {
+    fontSize: 12.5,
+    letterSpacing: -0.1,
   },
   heroLeft: {
     flexDirection: 'row',
