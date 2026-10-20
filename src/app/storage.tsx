@@ -16,6 +16,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useTheme } from '../theme/ThemeProvider';
 import { useMediaStore } from '../store/useMediaStore';
 import { PixoraMediaInfo } from '../services/media/mediaTypes';
+import DeleteConfirmModal from '../components/common/DeleteConfirmModal';
+import EmptyStateView from '../components/common/EmptyStateView';
 
 const LARGE_VIDEO_THRESHOLD_BYTES = 500 * 1024 * 1024; // 500 MB
 
@@ -46,6 +48,7 @@ export default function StorageScreen() {
 
   const [isScanning, setIsScanning] = useState(true);
   const [videoSizes, setVideoSizes] = useState<Map<string, number>>(new Map());
+  const [deleteTarget, setDeleteTarget] = useState<VideoSizeInfo | null>(null);
 
   // Filter all video assets
   const allVideos = useMemo(() => {
@@ -118,28 +121,22 @@ export default function StorageScreen() {
 
   // Handle delete / move to trash
   const handleDelete = useCallback((item: VideoSizeInfo) => {
-    Alert.alert(
-      'Move to Trash',
-      `Move "${item.asset.filename || 'this video'}" (${formatBytes(item.sizeBytes)}) to Recently Deleted? You can recover it within 30 days.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Move to Trash', 
-          style: 'destructive',
-          onPress: async () => {
-            const success = await deleteMediaAsync(item.asset.id);
-            if (success) {
-              setVideoSizes(prev => {
-                const next = new Map(prev);
-                next.delete(item.asset.id);
-                return next;
-              });
-            }
-          }
-        }
-      ]
-    );
-  }, [deleteMediaAsync]);
+    setDeleteTarget(item);
+  }, []);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    const success = await deleteMediaAsync(target.asset.id);
+    if (success) {
+      setVideoSizes(prev => {
+        const next = new Map(prev);
+        next.delete(target.asset.id);
+        return next;
+      });
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -246,18 +243,26 @@ export default function StorageScreen() {
 
         {/* Empty State */}
         {!isScanning && largeVideos.length === 0 && (
-          <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="checkmark-done-circle" size={48} color="#34D399" />
-            </View>
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>No Videos Over 500 MB</Text>
-            <Text style={[styles.emptyDesc, { color: theme.textMuted }]}>
-              None of your videos exceed the 500 MB threshold. Your storage is clean and optimized!
-            </Text>
-          </View>
+          <EmptyStateView
+            icon="checkmark-done-circle-outline"
+            title="Storage is Optimized"
+            description="No videos over 500 MB were found on your device."
+            actionLabel="Return to Gallery"
+            onAction={() => router.back()}
+          />
         )}
 
       </ScrollView>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        visible={deleteTarget !== null}
+        title="Move to Trash?"
+        message={`Move "${deleteTarget?.asset.filename || 'this video'}" (${deleteTarget ? formatBytes(deleteTarget.sizeBytes) : ''}) to Recently Deleted? You can recover within 30 days.`}
+        confirmText="Move to Trash"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleConfirmDelete}
+      />
     </View>
   );
 }

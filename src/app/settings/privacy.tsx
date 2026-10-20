@@ -116,9 +116,6 @@ export default function PrivacySettingsScreen() {
               </View>
               <View style={styles.rowBody}>
                 <Text style={[styles.rowLabel, { color: theme.text }]}>Private Vault</Text>
-                <Text style={[styles.rowSublabel, { color: theme.textMuted }]}>
-                  Strictly hidden from gallery and search
-                </Text>
               </View>
               <View style={styles.rowEnd}>
                 <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />

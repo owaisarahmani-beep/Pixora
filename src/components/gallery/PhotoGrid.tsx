@@ -1,9 +1,7 @@
-import React, { useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
 
 import { useTheme } from '../../theme/ThemeProvider';
 import { MediaGroup, PixoraMediaInfo } from '../../services/media/mediaTypes';
@@ -28,15 +26,12 @@ const SPACING = 2;
 export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, onRefresh, source = 'gallery' }: Props) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
-  const itemSize = Math.max(10, (width - SPACING * (NUM_COLUMNS - 1)) / NUM_COLUMNS);
+  const itemSize = Math.max(10, Math.floor((width - SPACING * (NUM_COLUMNS - 1)) / NUM_COLUMNS));
   
   const setAvailableIds = useSelectionStore(state => state.setAvailableIds);
   const isSelectionMode = useSelectionStore(state => state.isSelectionMode);
   const selectedIds = useSelectionStore(state => state.selectedIds);
   const selectMultiple = useSelectionStore(state => state.selectMultiple);
-
-  const scrollYRef = useRef(0);
-  const lastSelectedIdRef = useRef<string | null>(null);
 
   const allIds = useMemo(() => {
     const ids: string[] = [];
@@ -65,64 +60,6 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
     return flattened;
   }, [groupedMedia]);
 
-  // Precompute spatial layout of headers and rows for drag-to-select hit testing
-  const layoutMap = useMemo(() => {
-    const map: { type: 'header' | 'row'; top: number; bottom: number; items?: PixoraMediaInfo[] }[] = [];
-    let currentY = 0;
-    const headerHeight = 44;
-    const rowHeight = itemSize + SPACING;
-
-    data.forEach((entry) => {
-      if (entry.type === 'header') {
-        map.push({ type: 'header', top: currentY, bottom: currentY + headerHeight });
-        currentY += headerHeight;
-      } else {
-        map.push({ type: 'row', top: currentY, bottom: currentY + rowHeight, items: entry.items });
-        currentY += rowHeight;
-      }
-    });
-    return map;
-  }, [data, itemSize]);
-
-  // Find item under finger coordinates and select it
-  const selectItemAtCoords = useCallback((touchX: number, touchY: number) => {
-    const absoluteY = touchY + scrollYRef.current;
-    
-    for (let i = 0; i < layoutMap.length; i++) {
-      const row = layoutMap[i];
-      if (absoluteY >= row.top && absoluteY < row.bottom) {
-        if (row.type === 'row' && row.items) {
-          const col = Math.floor(touchX / (itemSize + SPACING));
-          if (col >= 0 && col < row.items.length) {
-            const item = row.items[col];
-            if (item && item.id !== lastSelectedIdRef.current) {
-              lastSelectedIdRef.current = item.id;
-              selectMultiple([item.id], true);
-            }
-          }
-        }
-        break;
-      }
-    }
-  }, [layoutMap, itemSize, selectMultiple]);
-
-  // Drag to select Pan gesture
-  const dragSelectGesture = useMemo(() => {
-    return Gesture.Pan()
-      .enabled(isSelectionMode)
-      .activeOffsetX([-10, 10])
-      .activeOffsetY([-10, 10])
-      .onBegin((e) => {
-        runOnJS(selectItemAtCoords)(e.x, e.y);
-      })
-      .onUpdate((e) => {
-        runOnJS(selectItemAtCoords)(e.x, e.y);
-      })
-      .onEnd(() => {
-        lastSelectedIdRef.current = null;
-      });
-  }, [isSelectionMode, selectItemAtCoords]);
-
   const renderItem = ({ item }: { item: ListItem }) => {
     if (item.type === 'header') {
       let isAllSelected = false;
@@ -138,6 +75,7 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
             <Pressable 
               onPress={() => selectMultiple(item.assetIds, !isAllSelected)}
               style={styles.dateSelectBtn}
+              hitSlop={8}
             >
               <Ionicons 
                 name={isAllSelected ? "checkmark-circle" : "ellipse-outline"} 
@@ -153,7 +91,14 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
     return (
       <View style={styles.row}>
         {item.items.map((media) => (
-          <PhotoThumbnail key={media.id} item={media} numColumns={NUM_COLUMNS} source={source} allIds={allIds} />
+          <PhotoThumbnail
+            key={media.id}
+            item={media}
+            itemSize={itemSize}
+            numColumns={NUM_COLUMNS}
+            source={source}
+            allIds={allIds}
+          />
         ))}
       </View>
     );
@@ -162,26 +107,20 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
   const AnyFlashList = FlashList as any;
 
   return (
-    <GestureDetector gesture={dragSelectGesture}>
-      <View style={{ flex: 1 }}>
-        <AnyFlashList
-          data={data}
-          estimatedItemSize={100}
-          renderItem={renderItem}
-          keyExtractor={(item: ListItem) => item.type === 'header' ? `header-${item.title}` : `row-${item.items[0].id}`}
-          getItemType={(item: ListItem) => item.type}
-          onEndReached={onEndReached}
-          onEndReachedThreshold={0.5}
-          refreshing={isRefreshing}
-          onRefresh={onRefresh}
-          onScroll={(e: any) => {
-            scrollYRef.current = e.nativeEvent.contentOffset.y;
-          }}
-          scrollEventThrottle={16}
-          contentContainerStyle={{ paddingBottom: 100 }}
-        />
-      </View>
-    </GestureDetector>
+    <View style={{ flex: 1 }}>
+      <AnyFlashList
+        data={data}
+        estimatedItemSize={itemSize + SPACING}
+        renderItem={renderItem}
+        keyExtractor={(item: ListItem) => item.type === 'header' ? `header-${item.title}` : `row-${item.items[0].id}`}
+        getItemType={(item: ListItem) => item.type}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.5}
+        refreshing={isRefreshing}
+        onRefresh={onRefresh}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      />
+    </View>
   );
 }
 

@@ -7,6 +7,7 @@ import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useSecureScreen } from '../../hooks/useSecureScreen';
+import EmptyStateView from '../../components/common/EmptyStateView';
 
 export default function PrivateVaultScreen() {
   const theme = useTheme();
@@ -43,9 +44,9 @@ export default function PrivateVaultScreen() {
         <View style={[styles.lockIconBadge, { backgroundColor: '#6366F120', borderColor: '#818CF8' }]}>
           <Ionicons name="lock-closed" size={44} color="#818CF8" />
         </View>
-        <Text style={[styles.authTitle, { color: theme.text }]}>Private Vault Locked</Text>
+        <Text style={[styles.authTitle, { color: theme.text }]}>Private Vault</Text>
         <Text style={[styles.authSubtitle, { color: theme.textMuted }]}>
-          Biometric authentication required to view quarantined media
+          Authentication required to view protected media
         </Text>
         <ActivityIndicator size="small" color={theme.accent} style={{ marginTop: 20 }} />
       </View>
@@ -59,25 +60,12 @@ export default function PrivateVaultScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Stack.Screen 
         options={{ 
-          title: `Private Vault (${vaultPhotos.length})`,
+          title: 'Private Vault',
           headerStyle: { backgroundColor: theme.background },
           headerTintColor: theme.text,
           headerShadowVisible: false,
         }} 
       />
-      
-      {/* Sleek Info Banner */}
-      <View style={[styles.infoBanner, { backgroundColor: theme.surface, borderColor: 'rgba(255,255,255,0.06)' }]}>
-        <View style={[styles.infoIconBadge, { backgroundColor: '#6366F125' }]}>
-          <Ionicons name="shield-checkmark" size={20} color="#818CF8" />
-        </View>
-        <View style={styles.infoTextWrapper}>
-          <Text style={[styles.infoTitle, { color: theme.text }]}>Zero-Exposure Storage</Text>
-          <Text style={[styles.infoText, { color: theme.textMuted }]}>
-            These items are quarantined from gallery timelines, album counts, and search results.
-          </Text>
-        </View>
-      </View>
 
       <FlatList
         data={vaultPhotos}
@@ -104,15 +92,13 @@ export default function PrivateVaultScreen() {
           </View>
         )}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <View style={[styles.emptyIconBadge, { backgroundColor: '#6366F115' }]}>
-              <Ionicons name="shield-outline" size={48} color="#818CF8" />
-            </View>
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>Vault is Empty</Text>
-            <Text style={[styles.emptyDescription, { color: theme.textMuted }]}>
-              Select photos in your gallery, tap the action menu, and choose "Make Private" to safely quarantine them here.
-            </Text>
-          </View>
+          <EmptyStateView
+            icon="lock-closed-outline"
+            title="Vault is Empty"
+            description="Items you add to the vault are secured with biometrics and hidden from your main library."
+            actionLabel="Return to Gallery"
+            onAction={() => router.back()}
+          />
         }
       />
     </View>

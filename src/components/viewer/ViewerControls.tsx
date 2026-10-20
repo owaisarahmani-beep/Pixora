@@ -131,46 +131,37 @@ export default function ViewerControls({ item }: Props) {
           </Pressable>
         </View>
 
-        {/* Bottom Bar: 4 Primary Actions (Favorite, Edit, Share, Delete) */}
-        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        {/* Bottom Bar: 4 Primary Icon Actions (Favorite, Edit, Share, Delete) */}
+        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <View style={styles.bottomBarInner}>
             {/* 1. Favorite */}
-            <Pressable onPress={() => toggleFavorite(item.id, item)} style={styles.actionButton}>
+            <Pressable onPress={() => toggleFavorite(item.id, item)} style={styles.actionButton} hitSlop={12}>
               <Ionicons
                 name={isFavorite ? 'heart' : 'heart-outline'}
-                size={24}
+                size={26}
                 color={isFavorite ? '#EF4444' : '#FFF'}
               />
-              <Text style={[styles.actionText, isFavorite && { color: '#EF4444' }]}>Favorite</Text>
             </Pressable>
 
             {/* 2. Edit */}
-            <Pressable onPress={handleEdit} style={styles.actionButton}>
-              <Ionicons
-                name="color-wand-outline"
-                size={24}
-                color={item.mediaType === 'photo' ? '#FFF' : 'rgba(255,255,255,0.4)'}
-              />
-              <Text
-                style={[
-                  styles.actionText,
-                  item.mediaType !== 'photo' && { color: 'rgba(255,255,255,0.4)' },
-                ]}
-              >
-                Edit
-              </Text>
-            </Pressable>
+            {item.mediaType === 'photo' ? (
+              <Pressable onPress={handleEdit} style={styles.actionButton} hitSlop={12}>
+                <Ionicons
+                  name="color-wand-outline"
+                  size={26}
+                  color="#FFF"
+                />
+              </Pressable>
+            ) : null}
 
             {/* 3. Share */}
-            <Pressable onPress={handleShare} style={styles.actionButton}>
-              <Ionicons name="share-outline" size={24} color="#FFF" />
-              <Text style={styles.actionText}>Share</Text>
+            <Pressable onPress={handleShare} style={styles.actionButton} hitSlop={12}>
+              <Ionicons name="share-outline" size={26} color="#FFF" />
             </Pressable>
 
             {/* 4. Delete */}
-            <Pressable onPress={() => setShowDeleteModal(true)} style={styles.actionButton}>
-              <Ionicons name="trash-outline" size={24} color="#EF4444" />
-              <Text style={[styles.actionText, { color: '#EF4444' }]}>Delete</Text>
+            <Pressable onPress={() => setShowDeleteModal(true)} style={styles.actionButton} hitSlop={12}>
+              <Ionicons name="trash-outline" size={26} color="#EF4444" />
             </Pressable>
           </View>
         </View>
@@ -252,14 +243,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   bottomBar: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 24,
+    paddingTop: 14,
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   bottomBarInner: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
+    height: 44,
   },
   iconButton: {
     padding: 8,
@@ -267,15 +259,8 @@ const styles = StyleSheet.create({
   actionButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    minWidth: 64,
-  },
-  actionText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '500',
-    marginTop: 4,
+    padding: 10,
+    minWidth: 52,
   },
   modalOverlay: {
     flex: 1,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -19,6 +19,7 @@ import * as MediaLibrary from 'expo-media-library';
 
 import { useTheme } from '../../theme/ThemeProvider';
 import { useMediaStore } from '../../store/useMediaStore';
+import CropOverlay, { CropRect } from '../../components/editor/CropOverlay';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -50,6 +51,16 @@ export default function EditorScreen() {
   const [scaleOption, setScaleOption] = useState<ScaleOption>('original');
   const [quality, setQuality] = useState<QualityOption>(1.0);
   const [format, setFormat] = useState<FormatOption>(ImageManipulator.SaveFormat.JPEG);
+
+  // Custom Interactive Crop State
+  const [containerLayout, setContainerLayout] = useState<{ width: number; height: number } | null>(null);
+  const [activeCropRect, setActiveCropRect] = useState<CropRect>({
+    originX: 0.05,
+    originY: 0.05,
+    width: 0.9,
+    height: 0.9,
+  });
+  const [hasAppliedCrop, setHasAppliedCrop] = useState<boolean>(false);
 
   // Active Bottom Tab
   const [activeTab, setActiveTab] = useState<'transform' | 'crop' | 'export'>('transform');
@@ -191,10 +202,105 @@ export default function EditorScreen() {
     applyEdits(rotation, flipX, nextFlipY, cropRatio, scaleOption, quality, format);
   };
 
+  // Calculate exact position of rendered image within container
+  const imageLayout = useMemo(() => {
+    if (!containerLayout || containerLayout.width === 0 || containerLayout.height === 0) return null;
+    const baseW = currentDims.width || originalDims.width;
+    const baseH = currentDims.height || originalDims.height;
+    if (baseW === 0 || baseH === 0) return null;
+
+    const containerAspect = containerLayout.width / containerLayout.height;
+    const imageAspect = baseW / baseH;
+
+    let w = containerLayout.width;
+    let h = containerLayout.height;
+    let x = 0;
+    let y = 0;
+
+    if (containerAspect > imageAspect) {
+      h = containerLayout.height;
+      w = h * imageAspect;
+      x = (containerLayout.width - w) / 2;
+    } else {
+      w = containerLayout.width;
+      h = w / imageAspect;
+      y = (containerLayout.height - h) / 2;
+    }
+
+    return { width: w, height: h, x, y };
+  }, [containerLayout, currentDims, originalDims]);
+
   // Handlers for Crop
   const handleSelectCrop = (crop: CropRatio) => {
     setCropRatio(crop);
-    applyEdits(rotation, flipX, flipY, crop, scaleOption, quality, format);
+    const baseW = currentDims.width || originalDims.width || 1000;
+    const baseH = currentDims.height || originalDims.height || 1000;
+    const imageAspect = baseW / baseH;
+
+    if (crop === 'original') {
+      setActiveCropRect({ originX: 0.05, originY: 0.05, width: 0.9, height: 0.9 });
+      return;
+    }
+
+    let targetRatio = 1;
+    switch (crop) {
+      case '1:1': targetRatio = 1; break;
+      case '4:5': targetRatio = 4 / 5; break;
+      case '16:9': targetRatio = 16 / 9; break;
+      case '9:16': targetRatio = 9 / 16; break;
+      case '4:3': targetRatio = 4 / 3; break;
+      case '3:4': targetRatio = 3 / 4; break;
+    }
+
+    const ratioFactor = targetRatio / imageAspect;
+    let w = 0.85;
+    let h = 0.85;
+
+    if (ratioFactor >= 1) {
+      w = 0.85;
+      h = Math.min(0.85, 0.85 / ratioFactor);
+    } else {
+      h = 0.85;
+      w = Math.min(0.85, 0.85 * ratioFactor);
+    }
+
+    const originX = (1 - w) / 2;
+    const originY = (1 - h) / 2;
+
+    setActiveCropRect({ originX, originY, width: w, height: h });
+  };
+
+  // Apply the custom interactive crop to the photo
+  const handleApplyCustomCrop = async () => {
+    if (!activeCropRect) return;
+    setIsProcessing(true);
+
+    try {
+      const sourceUri = currentUri || originalUri!;
+      const baseW = currentDims.width || originalDims.width;
+      const baseH = currentDims.height || originalDims.height;
+
+      const originX = Math.max(0, Math.round(activeCropRect.originX * baseW));
+      const originY = Math.max(0, Math.round(activeCropRect.originY * baseH));
+      const width = Math.min(baseW - originX, Math.round(activeCropRect.width * baseW));
+      const height = Math.min(baseH - originY, Math.round(activeCropRect.height * baseH));
+
+      if (width > 20 && height > 20) {
+        const result = await ImageManipulator.manipulateAsync(
+          sourceUri,
+          [{ crop: { originX, originY, width, height } }],
+          { compress: quality, format }
+        );
+        setCurrentUri(result.uri);
+        setCurrentDims({ width: result.width, height: result.height });
+        setHasAppliedCrop(true);
+        setActiveCropRect({ originX: 0.05, originY: 0.05, width: 0.9, height: 0.9 });
+      }
+    } catch (e) {
+      console.error('Custom crop failed', e);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Handlers for Scale & Quality
@@ -222,6 +328,8 @@ export default function EditorScreen() {
     setScaleOption('original');
     setQuality(1.0);
     setFormat(ImageManipulator.SaveFormat.JPEG);
+    setHasAppliedCrop(false);
+    setActiveCropRect({ originX: 0.05, originY: 0.05, width: 0.9, height: 0.9 });
     setCurrentUri(originalUri);
     setCurrentDims(originalDims);
   };
@@ -255,7 +363,7 @@ export default function EditorScreen() {
     );
   }
 
-  const hasEdits = rotation !== 0 || flipX || flipY || cropRatio !== 'original' || scaleOption !== 'original' || quality !== 1.0;
+  const hasEdits = rotation !== 0 || flipX || flipY || hasAppliedCrop || scaleOption !== 'original' || quality !== 1.0;
 
   return (
     <View style={[styles.container, { backgroundColor: '#000', paddingTop: insets.top }]}>
@@ -286,13 +394,24 @@ export default function EditorScreen() {
       </View>
 
       {/* Main Image Viewport */}
-      <View style={styles.imageContainer}>
+      <View
+        style={styles.imageContainer}
+        onLayout={(e) => setContainerLayout(e.nativeEvent.layout)}
+      >
         <Image 
           source={{ uri: showOriginal ? originalUri : (currentUri || originalUri) }} 
           style={styles.image} 
           contentFit="contain"
           transition={0}
         />
+
+        {activeTab === 'crop' && (
+          <CropOverlay
+            imageLayout={imageLayout}
+            initialCrop={activeCropRect}
+            onCropChange={(rect) => setActiveCropRect(rect)}
+          />
+        )}
         
         {/* Hold-to-Compare Indicator */}
         {showOriginal && (
@@ -351,33 +470,43 @@ export default function EditorScreen() {
           )}
 
           {activeTab === 'crop' && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
-              {[
-                { id: 'original', label: 'Full' },
-                { id: '1:1', label: '1:1 Square' },
-                { id: '4:5', label: '4:5 Portrait' },
-                { id: '16:9', label: '16:9 Cinema' },
-                { id: '9:16', label: '9:16 Story' },
-                { id: '4:3', label: '4:3 Standard' },
-                { id: '3:4', label: '3:4 Classic' },
-              ].map(item => (
-                <Pressable
-                  key={item.id}
-                  style={[
-                    styles.chip,
-                    cropRatio === item.id && { backgroundColor: theme.accent, borderColor: theme.accent }
-                  ]}
-                  onPress={() => handleSelectCrop(item.id as CropRatio)}
-                >
-                  <Text style={[
-                    styles.chipText,
-                    cropRatio === item.id ? { color: '#000', fontWeight: '700' } : { color: '#FFF' }
-                  ]}>
-                    {item.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+            <View style={styles.cropTabContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
+                {[
+                  { id: 'original', label: 'Full / Free' },
+                  { id: '1:1', label: '1:1' },
+                  { id: '4:5', label: '4:5' },
+                  { id: '16:9', label: '16:9' },
+                  { id: '9:16', label: '9:16' },
+                  { id: '4:3', label: '4:3' },
+                  { id: '3:4', label: '3:4' },
+                ].map(item => (
+                  <Pressable
+                    key={item.id}
+                    style={[
+                      styles.chip,
+                      cropRatio === item.id && { backgroundColor: theme.accent, borderColor: theme.accent }
+                    ]}
+                    onPress={() => handleSelectCrop(item.id as CropRatio)}
+                  >
+                    <Text style={[
+                      styles.chipText,
+                      cropRatio === item.id ? { color: '#000', fontWeight: '700' } : { color: '#FFF' }
+                    ]}>
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <Pressable
+                style={[styles.applyCropBtn, { backgroundColor: theme.accent }]}
+                onPress={handleApplyCustomCrop}
+                disabled={isProcessing}
+              >
+                <Ionicons name="checkmark" size={18} color="#000" />
+                <Text style={styles.applyCropText}>Apply</Text>
+              </Pressable>
+            </View>
           )}
 
           {activeTab === 'export' && (
@@ -616,6 +745,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
+  },
+  cropTabContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 8,
+  },
+  applyCropBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginLeft: 8,
+  },
+  applyCropText: {
+    color: '#000',
+    fontSize: 13,
+    fontWeight: '700',
   },
   chip: {
     paddingVertical: 8,

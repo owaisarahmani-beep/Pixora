@@ -13,6 +13,7 @@ import Animated, {
   runOnJS 
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useMediaStore } from '../../store/useMediaStore';
@@ -284,6 +285,7 @@ const MediaPage = React.memo(({ item, isActive }: { item: PixoraMediaInfo, isAct
 MediaPage.displayName = 'MediaPage';
 
 const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolean }) => {
+  const insets = useSafeAreaInsets();
   const player = useVideoPlayer(item.uri, (p) => {
     p.loop = true;
   });
@@ -295,8 +297,10 @@ const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolea
     }
   }, [isActive, player]);
 
+  const bottomInset = Math.max(insets.bottom, 12) + 56;
+
   return (
-    <View style={styles.page}>
+    <View style={[styles.page, { paddingBottom: bottomInset }]}>
       {isActive ? (
         <VideoView
           style={styles.media}

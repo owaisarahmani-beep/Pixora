@@ -125,7 +125,6 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.rowBody}>
                 <Text style={[styles.rowLabel, { color: theme.text }]}>Storage Cleaner</Text>
-                <Text style={[styles.rowSublabel, { color: theme.textMuted }]}>Clean &gt; 500 MB videos & junk</Text>
               </View>
               <View style={styles.rowEnd}>
                 <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />

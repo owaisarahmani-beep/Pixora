@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 interface Props {
   item: PixoraMediaInfo;
   numColumns: number;
+  itemSize?: number;
   source?: 'gallery' | 'search' | 'favorites' | 'album' | 'locked' | 'archive' | 'hidden' | 'private';
   allIds?: string[];
 }
@@ -22,9 +23,9 @@ function formatDuration(duration: number) {
 
 import { useSelectionStore } from '../../store/useSelectionStore';
 
-const PhotoThumbnail = ({ item, numColumns, source = 'gallery', allIds = [] }: Props) => {
+const PhotoThumbnail = ({ item, numColumns, itemSize: propItemSize, source = 'gallery', allIds = [] }: Props) => {
   const { width } = useWindowDimensions();
-  const itemSize = Math.max(10, (width - SPACING * (numColumns - 1)) / numColumns);
+  const itemSize = propItemSize ?? Math.max(10, (width - SPACING * (numColumns - 1)) / numColumns);
   
   const isSelectionMode = useSelectionStore(state => state.isSelectionMode && state.selectionContext === 'media');
   const isSelected = useSelectionStore(state => state.isSelected(item.id));
