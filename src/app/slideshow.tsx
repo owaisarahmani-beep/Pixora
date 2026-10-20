@@ -16,12 +16,10 @@ import { usePrivacyStore } from '../store/usePrivacyStore';
 import { useAuthorizedMedia } from '../hooks/useVisibleMedia';
 import { SMART_ALBUM_DEFS } from '../hooks/useSmartAlbums';
 import { PixoraMediaInfo } from '../services/media/mediaTypes';
+import { useMemories } from '../hooks/useMemories';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const MAX_DOTS = 10;
-const SLIDE_INTERVAL_MS = 3000;
-
-import { useMemories } from '../hooks/useMemories';
+const SLIDE_INTERVAL_MS = 4000;
 
 export default function SlideshowScreen() {
   const insets = useSafeAreaInsets();
@@ -34,11 +32,13 @@ export default function SlideshowScreen() {
 
   // Media sources
   const allMedia = useMediaStore(state => state.media);
-  const archivedAssetIds = usePrivacyStore(state => state.archivedAssetIds);
-
   const publicMedia = useAuthorizedMedia(allMedia, 'public');
   const archiveMedia = useAuthorizedMedia(allMedia, 'archive');
   const memories = useMemories(publicMedia);
+
+  const selectedMemory = useMemo(() => {
+    return memoryId ? memories.find(m => m.id === memoryId) : null;
+  }, [memoryId, memories]);
 
   // Resolve media array based on source param
   const slides: PixoraMediaInfo[] = useMemo(() => {
@@ -47,33 +47,42 @@ export default function SlideshowScreen() {
     if (source === 'archive') {
       base = archiveMedia;
     } else if (source === 'memory' && memoryId) {
-      const memory = memories.find(m => m.id === memoryId);
-      base = memory ? memory.assets : [];
+      base = selectedMemory ? selectedMemory.assets : [];
     } else if (source === 'smart' && smartAlbumId) {
       const def = SMART_ALBUM_DEFS.find(d => d.id === smartAlbumId);
       base = def ? publicMedia.filter(def.filter) : publicMedia;
     } else if (source === 'album' && albumId) {
       base = publicMedia.filter(m => m.albumId === albumId);
     } else {
-      // Default: all public gallery media
       base = publicMedia;
     }
 
-    // Only show photos for slideshow (videos skipped)
+    // Photos for story slideshow
     return base.filter(m => m.mediaType === 'photo');
-  }, [source, albumId, smartAlbumId, memoryId, publicMedia, archiveMedia, memories]);
+  }, [source, albumId, smartAlbumId, memoryId, publicMedia, archiveMedia, selectedMemory]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isHolding, setIsHolding] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const advance = useCallback(() => {
-    setCurrentIndex(prev => (prev + 1) % Math.max(slides.length, 1));
+    setCurrentIndex(prev => {
+      if (prev + 1 >= slides.length) {
+        // Finished story -> close
+        router.back();
+        return prev;
+      }
+      return prev + 1;
+    });
   }, [slides.length]);
 
-  // Set up / tear down the interval
+  const goPrevious = useCallback(() => {
+    setCurrentIndex(prev => Math.max(0, prev - 1));
+  }, []);
+
+  // Set up / tear down the advance timer (paused when finger is holding)
   useEffect(() => {
-    if (isPlaying && slides.length > 1) {
+    if (!isHolding && slides.length > 0) {
       intervalRef.current = setInterval(advance, SLIDE_INTERVAL_MS);
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -81,48 +90,32 @@ export default function SlideshowScreen() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isPlaying, advance, slides.length]);
+  }, [isHolding, advance, slides.length, currentIndex]);
 
   // Reset index when slides list changes
   useEffect(() => {
     setCurrentIndex(0);
   }, [slides.length]);
 
-  const togglePlayPause = () => setIsPlaying(p => !p);
-
-  const handleTouch = (evt: any) => {
+  const handlePress = (evt: any) => {
     const x = evt.nativeEvent.locationX;
+    // Left 30% goes to previous slide
     if (x < SCREEN_WIDTH * 0.3) {
-      setCurrentIndex(prev => (prev - 1 + Math.max(slides.length, 1)) % Math.max(slides.length, 1));
-      if (isPlaying) {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        intervalRef.current = setInterval(advance, SLIDE_INTERVAL_MS);
-      }
-    } else if (x > SCREEN_WIDTH * 0.7) {
-      advance();
-      if (isPlaying) {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        intervalRef.current = setInterval(advance, SLIDE_INTERVAL_MS);
-      }
+      goPrevious();
     } else {
-      togglePlayPause();
+      // Right 70% goes to next slide
+      advance();
     }
   };
 
   const currentSlide = slides[currentIndex];
-
-  // Dot indicators — show up to MAX_DOTS; when more, show proportional position
-  const dotCount = Math.min(slides.length, MAX_DOTS);
-  const activeDotIndex = slides.length <= MAX_DOTS
-    ? currentIndex
-    : Math.floor((currentIndex / (slides.length - 1)) * (MAX_DOTS - 1));
 
   if (slides.length === 0) {
     return (
       <View style={styles.noPhotosContainer}>
         <StatusBar hidden />
         <Ionicons name="images-outline" size={64} color="#FFFFFF" />
-        <Text style={styles.noPhotosText}>No photos to show</Text>
+        <Text style={styles.noPhotosText}>No photos in this memory</Text>
         <Pressable onPress={() => router.back()} style={styles.closeBtn}>
           <Ionicons name="close" size={28} color="#FFFFFF" />
         </Pressable>
@@ -134,61 +127,89 @@ export default function SlideshowScreen() {
     <View style={styles.container}>
       <StatusBar hidden />
 
-      {/* Full-screen image */}
-      <Pressable style={styles.imagePressable} onPress={(e) => handleTouch(e)}>
-        <Image
-          key={currentSlide?.id}
-          source={{ uri: currentSlide?.uri }}
-          style={styles.image}
-          contentFit="cover"
-          transition={0}
-        />
-      </Pressable>
-
-      {/* Dark gradient overlay (top) */}
-      <View style={styles.topOverlay} pointerEvents="none" />
-
-      {/* Dark gradient overlay (bottom) */}
-      <View style={styles.bottomOverlay} pointerEvents="none" />
-
-      {/* Close button */}
+      {/* Main Touch Container with WhatsApp-style Hold-to-Pause */}
       <Pressable
-        style={[styles.closeButton, { top: insets.top + 12 }]}
-        onPress={() => router.back()}
-        hitSlop={12}
+        style={styles.fullScreenPressable}
+        onPressIn={() => setIsHolding(true)}
+        onPressOut={() => setIsHolding(false)}
+        onPress={handlePress}
       >
-        <Ionicons name="close" size={26} color="#FFFFFF" />
+        {/* Subtle Ambient Blurred Backdrop (prevents black letterboxing) */}
+        {currentSlide && (
+          <Image
+            source={{ uri: currentSlide.uri }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            blurRadius={30}
+          />
+        )}
+        <View style={styles.backdropDarkDim} />
+
+        {/* Foreground Photo (contentFit="contain" prevents any over-zooming or cropping) */}
+        {currentSlide && (
+          <Image
+            key={currentSlide.id}
+            source={{ uri: currentSlide.uri }}
+            style={styles.mainImage}
+            contentFit="contain"
+            transition={150}
+          />
+        )}
       </Pressable>
 
-      {/* Bottom controls */}
-      <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 24 }]}>
-        {/* Progress dots */}
-        <View style={styles.dotsRow}>
-          {Array.from({ length: dotCount }).map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.dot,
-                i === activeDotIndex ? styles.dotActive : styles.dotInactive,
-              ]}
-            />
-          ))}
+      {/* Top Overlays (WhatsApp/Instagram Status Header): Hidden when holding to pause */}
+      {!isHolding && (
+        <View style={[styles.headerContainer, { top: insets.top + 8 }]} pointerEvents="box-none">
+          {/* Segmented Progress Bars */}
+          <View style={styles.progressBarRow}>
+            {slides.map((slide, index) => {
+              const isPast = index < currentIndex;
+              const isCurrent = index === currentIndex;
+              return (
+                <View key={slide.id || index} style={styles.progressSegmentTrack}>
+                  <View
+                    style={[
+                      styles.progressSegmentFill,
+                      isPast && styles.progressSegmentFilled,
+                      isCurrent && styles.progressSegmentCurrent,
+                    ]}
+                  />
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Title & Close Row */}
+          <View style={styles.headerInfoRow} pointerEvents="box-none">
+            <View style={styles.titleColumn}>
+              <Text style={styles.memoryTitle} numberOfLines={1}>
+                {selectedMemory?.title || 'Memory'}
+              </Text>
+              {selectedMemory?.subtitle && (
+                <Text style={styles.memorySubtitle} numberOfLines={1}>
+                  {selectedMemory.subtitle}
+                </Text>
+              )}
+            </View>
+
+            <Pressable
+              style={styles.closeButton}
+              onPress={() => router.back()}
+              hitSlop={14}
+            >
+              <Ionicons name="close" size={24} color="#FFFFFF" />
+            </Pressable>
+          </View>
         </View>
+      )}
 
-        {/* Play / Pause button */}
-        <Pressable onPress={togglePlayPause} style={styles.playPauseBtn} hitSlop={12}>
-          <Ionicons
-            name={isPlaying ? 'pause-circle' : 'play-circle'}
-            size={52}
-            color="#FFFFFF"
-          />
-        </Pressable>
-
-        {/* Index label */}
-        <Text style={styles.indexLabel}>
-          {currentIndex + 1} / {slides.length}
-        </Text>
-      </View>
+      {/* Subtle Hold Hint (fades away or shows briefly) */}
+      {isHolding && (
+        <View style={styles.pausePill}>
+          <Ionicons name="pause" size={14} color="#FFFFFF" />
+          <Text style={styles.pausePillText}>Paused</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -198,76 +219,104 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  imagePressable: {
+  fullScreenPressable: {
     ...StyleSheet.absoluteFill as any,
-  },
-  image: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
-  },
-  topOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 120,
-    // Simulated top-to-transparent gradient via opacity
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  bottomOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 200,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  closeButton: {
-    position: 'absolute',
-    right: 18,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  bottomControls: {
+  backdropDarkDim: {
+    ...StyleSheet.absoluteFill as any,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  mainImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+  },
+  headerContainer: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
-    alignItems: 'center',
-    gap: 12,
-    paddingTop: 16,
+    paddingHorizontal: 14,
+    zIndex: 20,
   },
-  dotsRow: {
+  progressBarRow: {
     flexDirection: 'row',
-    gap: 6,
-    alignItems: 'center',
+    gap: 4,
+    marginBottom: 10,
   },
-  dot: {
-    borderRadius: 999,
+  progressSegmentTrack: {
+    flex: 1,
+    height: 2.5,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    overflow: 'hidden',
   },
-  dotActive: {
-    width: 20,
-    height: 6,
+  progressSegmentFill: {
+    height: '100%',
+    width: '0%',
     backgroundColor: '#FFFFFF',
   },
-  dotInactive: {
-    width: 6,
-    height: 6,
-    backgroundColor: 'rgba(255,255,255,0.4)',
+  progressSegmentFilled: {
+    width: '100%',
   },
-  playPauseBtn: {
+  progressSegmentCurrent: {
+    width: '100%',
+  },
+  headerInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 2,
+  },
+  titleColumn: {
+    flex: 1,
+    marginRight: 16,
+  },
+  memoryTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  memorySubtitle: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 1,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  indexLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    fontWeight: '500',
+  pausePill: {
+    position: 'absolute',
+    top: 50,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
-  // No-photos fallback
+  pausePillText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   noPhotosContainer: {
     flex: 1,
     backgroundColor: '#000000',

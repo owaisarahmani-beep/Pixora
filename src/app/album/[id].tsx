@@ -9,13 +9,17 @@ import { useAuthorizedMedia } from '../../hooks/useVisibleMedia';
 import { groupMediaByDate } from '../../utils/dateGrouping';
 import PhotoGrid from '../../components/gallery/PhotoGrid';
 import { useSecureScreen } from '../../hooks/useSecureScreen';
+import EmptyStateView from '../../components/common/EmptyStateView';
 
 export default function AlbumMediaScreen() {
   const { id } = useLocalSearchParams();
+  const albumId = typeof id === 'string' ? id : (Array.isArray(id) ? id[0] : '');
   const theme = useTheme();
   
-  const isLocked = usePrivacyStore(state => state.isAlbumLocked(id as string));
-  const isUnlocked = usePrivacyStore(state => state.unlockedAlbums.includes(id as string));
+  const isLocked = usePrivacyStore(state => state.isAlbumLocked(albumId));
+  const isUnlocked = usePrivacyStore(state => state.unlockedAlbums.includes(albumId));
+  const unlockAlbumContent = usePrivacyStore(state => state.unlockAlbumContent);
+  const lockAlbumContent = usePrivacyStore(state => state.lockAlbumContent);
   
   // Protect screen if album is locked
   useSecureScreen(isLocked);
@@ -28,18 +32,18 @@ export default function AlbumMediaScreen() {
     loadMoreAlbumMedia 
   } = useAlbumsStore();
 
-  const album = albums.find(a => a.id === id);
+  const album = albums.find(a => a.id === albumId);
 
   useEffect(() => {
-    if (typeof id === 'string') {
-      openAlbum(id);
+    if (albumId) {
+      openAlbum(albumId);
     }
-  }, [id, openAlbum]);
+  }, [albumId, openAlbum]);
 
   // Apply Access Control and group
   const authorizedMedia = useAuthorizedMedia(
     activeAlbumMedia, 
-    isLocked ? { type: 'locked_album', albumId: id as string } : 'public'
+    isLocked ? { type: 'locked_album', albumId } : 'public'
   );
   
   const groupedMedia = useMemo(() => groupMediaByDate(authorizedMedia), [authorizedMedia]);
@@ -55,6 +59,14 @@ export default function AlbumMediaScreen() {
     );
   }
 
+  const handleToggleLock = async () => {
+    if (isLocked) {
+      await unlockAlbumContent(albumId);
+    } else {
+      await lockAlbumContent(albumId);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Stack.Screen 
@@ -67,6 +79,33 @@ export default function AlbumMediaScreen() {
           headerLeft: () => (
             <Pressable onPress={() => router.back()} style={{ marginRight: 16 }}>
               <Ionicons name="arrow-back" size={24} color={theme.text} />
+            </Pressable>
+          ),
+          headerRight: () => (
+            <Pressable
+              onPress={handleToggleLock}
+              style={({ pressed }) => [
+                styles.lockButton,
+                {
+                  backgroundColor: isLocked ? '#10B9811A' : theme.surface,
+                  borderColor: isLocked ? '#10B981' : theme.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <Ionicons
+                name={isLocked ? 'lock-open-outline' : 'lock-closed-outline'}
+                size={16}
+                color={isLocked ? '#10B981' : theme.text}
+              />
+              <Text
+                style={[
+                  styles.lockButtonText,
+                  { color: isLocked ? '#10B981' : theme.text },
+                ]}
+              >
+                {isLocked ? 'Remove Lock' : 'Lock Album'}
+              </Text>
             </Pressable>
           ),
         }} 
@@ -85,10 +124,13 @@ export default function AlbumMediaScreen() {
           source={isLocked ? 'locked' : 'album'}
         />
       ) : (
-        <View style={styles.centerState}>
-          <Ionicons name="images-outline" size={64} color={theme.textMuted} />
-          <Text style={[styles.stateText, { color: theme.textMuted }]}>This album is empty.</Text>
-        </View>
+        <EmptyStateView
+          icon="images-outline"
+          title="Album is Empty"
+          description="There are no photos or videos in this album yet."
+          actionLabel="Explore Photos"
+          onAction={() => router.push('/(tabs)')}
+        />
       )}
     </View>
   );
@@ -106,5 +148,18 @@ const styles = StyleSheet.create({
   stateText: {
     marginTop: 16,
     fontSize: 16,
+  },
+  lockButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  lockButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

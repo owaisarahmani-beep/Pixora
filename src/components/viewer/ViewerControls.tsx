@@ -10,6 +10,7 @@ import { useViewerStore } from '../../store/useViewerStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useMediaStore } from '../../store/useMediaStore';
 import { usePrivacyStore } from '../../store/usePrivacyStore';
+import DeleteConfirmModal from '../common/DeleteConfirmModal';
 
 interface Props {
   item: PixoraMediaInfo;
@@ -27,24 +28,7 @@ export default function ViewerControls({ item }: Props) {
   
   const opacity = useSharedValue(1);
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
-
-  const handleDelete = () => {
-    Alert.alert(
-      "Delete Photo",
-      "Are you sure you want to permanently delete this item?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
-          style: "destructive",
-          onPress: async () => {
-            const success = await deleteMediaAsync(item.id);
-            if (success) router.back();
-          }
-        }
-      ]
-    );
-  };
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     opacity.value = withTiming(controlsVisible ? 1 : 0, { duration: 200 });
@@ -64,8 +48,15 @@ export default function ViewerControls({ item }: Props) {
     }
   };
 
+  const handleEdit = () => {
+    if (item.mediaType === 'photo') {
+      router.push({ pathname: '/editor/[id]', params: { id: item.id, source } });
+    } else {
+      Alert.alert('Video Editing', 'Editing tools are currently designed for photos.');
+    }
+  };
+
   const isFavorite = favorites.has(item.id);
-  const isHidden = usePrivacyStore(state => state.isAssetHidden(item.id));
   const isPrivate = usePrivacyStore(state => state.isAssetPrivate(item.id));
   const isArchived = usePrivacyStore(state => state.isAssetArchived(item.id));
 
@@ -75,17 +66,10 @@ export default function ViewerControls({ item }: Props) {
 
     switch (action) {
       case 'edit':
-        router.push({ pathname: '/editor/[id]', params: { id: item.id, source } });
+        handleEdit();
         break;
       case 'details':
         setDetailsVisible(true);
-        break;
-      case 'hide':
-        await privacyStore.hideAssets([item.id]);
-        router.back();
-        break;
-      case 'unhide':
-        await privacyStore.unhideAssets([item.id]);
         break;
       case 'private':
         await privacyStore.makeAssetsPrivate([item.id]);
@@ -102,7 +86,7 @@ export default function ViewerControls({ item }: Props) {
         await privacyStore.unarchiveAssets([item.id]);
         break;
       case 'delete':
-        handleDelete();
+        setShowDeleteModal(true);
         break;
     }
   };
@@ -111,7 +95,6 @@ export default function ViewerControls({ item }: Props) {
     if (Platform.OS === 'ios') {
       const options = ['Cancel', 'Details'];
       if (item.mediaType === 'photo') options.push('Edit');
-      if (isHidden) options.push('Unhide'); else options.push('Hide');
       if (isPrivate) options.push('Remove from Vault'); else options.push('Make Private');
       if (isArchived) options.push('Unarchive'); else options.push('Archive');
       options.push('Delete');
@@ -122,7 +105,6 @@ export default function ViewerControls({ item }: Props) {
           if (buttonIndex === 0) return;
           const actionMap: Record<string, string> = {
             'Details': 'details', 'Edit': 'edit',
-            'Hide': 'hide', 'Unhide': 'unhide',
             'Make Private': 'private', 'Remove from Vault': 'unprivate',
             'Archive': 'archive', 'Unarchive': 'unarchive',
             'Delete': 'delete'
@@ -149,14 +131,46 @@ export default function ViewerControls({ item }: Props) {
           </Pressable>
         </View>
 
-        {/* Bottom Bar: Primary Actions (Favorite, Share) */}
-        <View style={[styles.bottomBar, { paddingBottom: insets.bottom || 20 }]}>
+        {/* Bottom Bar: 4 Primary Actions (Favorite, Edit, Share, Delete) */}
+        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.bottomBarInner}>
+            {/* 1. Favorite */}
             <Pressable onPress={() => toggleFavorite(item.id, item)} style={styles.actionButton}>
-              <Ionicons name={isFavorite ? "heart" : "heart-outline"} size={28} color={isFavorite ? "#EF4444" : "#FFF"} />
+              <Ionicons
+                name={isFavorite ? 'heart' : 'heart-outline'}
+                size={24}
+                color={isFavorite ? '#EF4444' : '#FFF'}
+              />
+              <Text style={[styles.actionText, isFavorite && { color: '#EF4444' }]}>Favorite</Text>
             </Pressable>
+
+            {/* 2. Edit */}
+            <Pressable onPress={handleEdit} style={styles.actionButton}>
+              <Ionicons
+                name="color-wand-outline"
+                size={24}
+                color={item.mediaType === 'photo' ? '#FFF' : 'rgba(255,255,255,0.4)'}
+              />
+              <Text
+                style={[
+                  styles.actionText,
+                  item.mediaType !== 'photo' && { color: 'rgba(255,255,255,0.4)' },
+                ]}
+              >
+                Edit
+              </Text>
+            </Pressable>
+
+            {/* 3. Share */}
             <Pressable onPress={handleShare} style={styles.actionButton}>
-              <Ionicons name="share-outline" size={28} color="#FFF" />
+              <Ionicons name="share-outline" size={24} color="#FFF" />
+              <Text style={styles.actionText}>Share</Text>
+            </Pressable>
+
+            {/* 4. Delete */}
+            <Pressable onPress={() => setShowDeleteModal(true)} style={styles.actionButton}>
+              <Ionicons name="trash-outline" size={24} color="#EF4444" />
+              <Text style={[styles.actionText, { color: '#EF4444' }]}>Delete</Text>
             </Pressable>
           </View>
         </View>
@@ -167,45 +181,58 @@ export default function ViewerControls({ item }: Props) {
         <Modal visible={moreMenuVisible} transparent animationType="fade" onRequestClose={() => setMoreMenuVisible(false)}>
           <TouchableWithoutFeedback onPress={() => setMoreMenuVisible(false)}>
             <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>More Options</Text>
-                
-                <Pressable style={styles.modalItem} onPress={() => handleMoreAction('details')}>
-                  <Ionicons name="information-circle-outline" size={24} color="#FFF" />
-                  <Text style={styles.modalItemText}>Details</Text>
-                </Pressable>
-
-                {item.mediaType === 'photo' && (
-                  <Pressable style={styles.modalItem} onPress={() => handleMoreAction('edit')}>
-                    <Ionicons name="color-wand-outline" size={24} color="#FFF" />
-                    <Text style={styles.modalItemText}>Edit</Text>
+              <TouchableWithoutFeedback>
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>More Options</Text>
+                  
+                  <Pressable style={styles.modalItem} onPress={() => handleMoreAction('details')}>
+                    <Ionicons name="information-circle-outline" size={24} color="#FFF" />
+                    <Text style={styles.modalItemText}>Details</Text>
                   </Pressable>
-                )}
 
-                <Pressable style={styles.modalItem} onPress={() => handleMoreAction(isHidden ? 'unhide' : 'hide')}>
-                  <Ionicons name={isHidden ? "eye-outline" : "eye-off-outline"} size={24} color="#FFF" />
-                  <Text style={styles.modalItemText}>{isHidden ? 'Unhide' : 'Hide'}</Text>
-                </Pressable>
+                  {item.mediaType === 'photo' && (
+                    <Pressable style={styles.modalItem} onPress={() => handleMoreAction('edit')}>
+                      <Ionicons name="color-wand-outline" size={24} color="#FFF" />
+                      <Text style={styles.modalItemText}>Edit</Text>
+                    </Pressable>
+                  )}
 
-                <Pressable style={styles.modalItem} onPress={() => handleMoreAction(isPrivate ? 'unprivate' : 'private')}>
-                  <Ionicons name={isPrivate ? "lock-open-outline" : "lock-closed-outline"} size={24} color="#FFF" />
-                  <Text style={styles.modalItemText}>{isPrivate ? 'Remove from Vault' : 'Make Private'}</Text>
-                </Pressable>
+                  <Pressable style={styles.modalItem} onPress={() => handleMoreAction(isPrivate ? 'unprivate' : 'private')}>
+                    <Ionicons name={isPrivate ? "lock-open-outline" : "lock-closed-outline"} size={24} color="#FFF" />
+                    <Text style={styles.modalItemText}>{isPrivate ? 'Remove from Vault' : 'Make Private'}</Text>
+                  </Pressable>
 
-                <Pressable style={styles.modalItem} onPress={() => handleMoreAction(isArchived ? 'unarchive' : 'archive')}>
-                  <Ionicons name={isArchived ? "archive" : "archive-outline"} size={24} color="#FFF" />
-                  <Text style={styles.modalItemText}>{isArchived ? 'Unarchive' : 'Archive'}</Text>
-                </Pressable>
+                  <Pressable style={styles.modalItem} onPress={() => handleMoreAction(isArchived ? 'unarchive' : 'archive')}>
+                    <Ionicons name={isArchived ? "archive" : "archive-outline"} size={24} color="#FFF" />
+                    <Text style={styles.modalItemText}>{isArchived ? 'Unarchive' : 'Archive'}</Text>
+                  </Pressable>
 
-                <Pressable style={[styles.modalItem, { borderBottomWidth: 0, marginTop: 8 }]} onPress={() => handleMoreAction('delete')}>
-                  <Ionicons name="trash-outline" size={24} color="#EF4444" />
-                  <Text style={[styles.modalItemText, { color: '#EF4444' }]}>Delete</Text>
-                </Pressable>
-              </View>
+                  <Pressable style={[styles.modalItem, { borderBottomWidth: 0, marginTop: 8 }]} onPress={() => handleMoreAction('delete')}>
+                    <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                    <Text style={[styles.modalItemText, { color: '#EF4444' }]}>Delete</Text>
+                  </Pressable>
+                </View>
+              </TouchableWithoutFeedback>
             </View>
           </TouchableWithoutFeedback>
         </Modal>
       )}
+
+      {/* Sleek Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        visible={showDeleteModal}
+        title={item.mediaType === 'video' ? 'Delete Video?' : 'Delete Photo?'}
+        message="This item will be moved to Recently Deleted. You can restore it anytime within 30 days."
+        confirmText="Move to Trash"
+        onCancel={() => setShowDeleteModal(false)}
+        onConfirm={async () => {
+          setShowDeleteModal(false);
+          const success = await deleteMediaAsync(item.id);
+          if (success) {
+            router.back();
+          }
+        }}
+      />
     </>
   );
 }
@@ -222,42 +249,52 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingBottom: 16,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   bottomBar: {
     paddingHorizontal: 16,
-    paddingTop: 16,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingTop: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   bottomBarInner: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingBottom: 8,
   },
   iconButton: {
     padding: 8,
   },
   actionButton: {
     alignItems: 'center',
-    padding: 12,
+    justifyContent: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    minWidth: 64,
+  },
+  actionText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 4,
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 28,
   },
   modalContent: {
-    width: '80%',
+    width: '100%',
+    maxWidth: 340,
     backgroundColor: '#1C1C1E',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 20,
+    padding: 20,
   },
   modalTitle: {
     color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700',
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -265,12 +302,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.12)',
   },
   modalItemText: {
     color: '#FFF',
-    fontSize: 16,
+    fontSize: 15,
     marginLeft: 16,
+    fontWeight: '500',
   },
 });

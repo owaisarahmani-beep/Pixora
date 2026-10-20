@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeProvider';
 import { useTrashStore, TrashedItem } from '../store/useTrashStore';
+import DeleteConfirmModal from '../components/common/DeleteConfirmModal';
+import EmptyStateView from '../components/common/EmptyStateView';
 
 const NUM_COLUMNS = 3;
 const GAP = 2;
@@ -32,6 +34,20 @@ export default function TrashScreen() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const isSelectionMode = selectedIds.size > 0;
+
+  const [confirmModal, setConfirmModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    onConfirm: () => Promise<void>;
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+    confirmText: 'Delete',
+    onConfirm: async () => {},
+  });
 
   const toggleSelection = useCallback((id: string) => {
     setSelectedIds(prev => {
@@ -55,57 +71,49 @@ export default function TrashScreen() {
   };
 
   const handleDeleteForever = () => {
-    Alert.alert(
-      'Delete Forever',
-      `Permanently delete ${selectedIds.size} item${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const ids = Array.from(selectedIds);
-            // Actually delete files from disk
-            for (const id of ids) {
-              try {
-                const MediaLibrary = require('expo-media-library');
-                await MediaLibrary.deleteAssetsAsync([id]);
-              } catch (e) {
-                console.warn('Could not delete asset from disk:', id, e);
-              }
-            }
-            permanentlyDelete(ids);
-            setSelectedIds(new Set());
-          },
-        },
-      ],
-    );
+    const count = selectedIds.size;
+    setConfirmModal({
+      visible: true,
+      title: 'Delete Forever?',
+      message: `Permanently delete ${count} selected item${count !== 1 ? 's' : ''}? This cannot be undone.`,
+      confirmText: 'Delete Permanently',
+      onConfirm: async () => {
+        const ids = Array.from(selectedIds);
+        for (const id of ids) {
+          try {
+            const MediaLibrary = require('expo-media-library');
+            await MediaLibrary.deleteAssetsAsync([id]);
+          } catch (e) {
+            console.warn('Could not delete asset from disk:', id, e);
+          }
+        }
+        permanentlyDelete(ids);
+        setSelectedIds(new Set());
+        setConfirmModal(prev => ({ ...prev, visible: false }));
+      },
+    });
   };
 
   const handleEmptyTrash = () => {
-    Alert.alert(
-      'Empty Trash',
-      'Permanently delete all items in trash? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Empty Trash',
-          style: 'destructive',
-          onPress: async () => {
-            for (const item of items) {
-              try {
-                const MediaLibrary = require('expo-media-library');
-                await MediaLibrary.deleteAssetsAsync([item.id]);
-              } catch (e) {
-                console.warn('Could not delete from disk:', item.id);
-              }
-            }
-            permanentlyDelete(items.map(i => i.id));
-            setSelectedIds(new Set());
-          },
-        },
-      ],
-    );
+    setConfirmModal({
+      visible: true,
+      title: 'Empty Trash?',
+      message: 'Permanently delete all items currently in trash? This action cannot be undone.',
+      confirmText: 'Empty Trash',
+      onConfirm: async () => {
+        for (const item of items) {
+          try {
+            const MediaLibrary = require('expo-media-library');
+            await MediaLibrary.deleteAssetsAsync([item.id]);
+          } catch (e) {
+            console.warn('Could not delete from disk:', item.id);
+          }
+        }
+        permanentlyDelete(items.map(i => i.id));
+        setSelectedIds(new Set());
+        setConfirmModal(prev => ({ ...prev, visible: false }));
+      },
+    });
   };
 
   const renderItem = ({ item }: { item: TrashedItem }) => {
@@ -175,12 +183,13 @@ export default function TrashScreen() {
       />
 
       {items.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="trash-outline" size={64} color={theme.textMuted} />
-          <Text style={[styles.emptyText, { color: theme.textMuted }]}>
-            No deleted items
-          </Text>
-        </View>
+        <EmptyStateView
+          icon="trash-outline"
+          title="Trash is Empty"
+          description="Photos and videos you delete will stay here for 30 days before being permanently removed from your device."
+          actionLabel="Return to Gallery"
+          onAction={() => router.back()}
+        />
       ) : (
         <FlatList
           data={items}
@@ -217,6 +226,16 @@ export default function TrashScreen() {
           </Pressable>
         </View>
       )}
+
+      {/* Sleek Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, visible: false }))}
+        onConfirm={confirmModal.onConfirm}
+      />
     </View>
   );
 }

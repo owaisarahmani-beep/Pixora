@@ -303,6 +303,10 @@ const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolea
           player={player}
           nativeControls
           contentFit="contain"
+          buttonOptions={{
+            showNext: false,
+            showPrevious: false,
+          }}
         />
       ) : (
         <Image

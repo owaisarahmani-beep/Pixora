@@ -1,16 +1,15 @@
-import React, { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, SectionList, Alert, TextInput, Modal } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, SectionList, Alert, TextInput, Modal, TouchableWithoutFeedback } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAlbumsStore } from '../../store/useAlbumsStore';
 import { useMediaStore } from '../../store/useMediaStore';
-import { useVisibleAlbums } from '../../hooks/useVisibleMedia';
+import { useVisibleAlbums, useAuthorizedMedia } from '../../hooks/useVisibleMedia';
 import { useSmartAlbums } from '../../hooks/useSmartAlbums';
 import { usePrivacyStore } from '../../store/usePrivacyStore';
 import { useSelectionStore } from '../../store/useSelectionStore';
 import { useTrashStore } from '../../store/useTrashStore';
-import { useAuthorizedMedia } from '../../hooks/useVisibleMedia';
 import { useMemories } from '../../hooks/useMemories';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import MemoriesCarousel from '../../components/gallery/MemoriesCarousel';
@@ -53,11 +52,16 @@ export default function AlbumsScreen() {
 
   const lockedAlbumIds = usePrivacyStore(state => state.lockedAlbumIds);
   const unlockAlbum = usePrivacyStore(state => state.unlockAlbum);
+  const unlockAlbumContent = usePrivacyStore(state => state.unlockAlbumContent);
+  const lockAlbumContent = usePrivacyStore(state => state.lockAlbumContent);
   
   const isSelectionMode = useSelectionStore(state => state.isSelectionMode && state.selectionContext === 'album');
   const enterSelectionMode = useSelectionStore(state => state.enterSelectionMode);
   const toggleSelection = useSelectionStore(state => state.toggleSelection);
   const isSelected = useSelectionStore(state => state.isSelected);
+
+  // Album menu state
+  const [albumMenuTarget, setAlbumMenuTarget] = React.useState<any | null>(null);
 
   // Rename state
   const [renameVisible, setRenameVisible] = React.useState(false);
@@ -155,7 +159,7 @@ export default function AlbumsScreen() {
         {selected ? (
           <Ionicons name="checkmark-circle" size={24} color={theme.accent} />
         ) : (
-          <Pressable onPress={() => handleRenameAlbum(item.id, item.title)} style={styles.moreBtn}>
+          <Pressable onPress={() => setAlbumMenuTarget(item)} style={styles.moreBtn} hitSlop={8}>
             <Ionicons name="ellipsis-vertical" size={18} color={theme.textMuted} />
           </Pressable>
         )}
@@ -224,11 +228,94 @@ export default function AlbumsScreen() {
         }
       />
 
+      {/* Album Options Modal */}
+      <Modal
+        visible={albumMenuTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAlbumMenuTarget(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setAlbumMenuTarget(null)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={[styles.menuBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Text style={[styles.menuAlbumTitle, { color: theme.text }]} numberOfLines={1}>
+                  {albumMenuTarget?.title}
+                </Text>
+
+                {lockedAlbumIds.includes(albumMenuTarget?.id) ? (
+                  <Pressable
+                    style={styles.menuRow}
+                    onPress={async () => {
+                      const target = albumMenuTarget;
+                      setAlbumMenuTarget(null);
+                      const success = await unlockAlbum(target.id);
+                      if (success) {
+                        await unlockAlbumContent(target.id);
+                      }
+                    }}
+                  >
+                    <View style={[styles.menuIconWrap, { backgroundColor: '#10B9811A' }]}>
+                      <Ionicons name="lock-open-outline" size={20} color="#10B981" />
+                    </View>
+                    <View style={styles.menuRowInfo}>
+                      <Text style={[styles.menuRowLabel, { color: '#10B981' }]}>Unlock Album</Text>
+                      <Text style={[styles.menuRowSublabel, { color: theme.textMuted }]}>
+                        Remove lock protection from this album
+                      </Text>
+                    </View>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    style={styles.menuRow}
+                    onPress={async () => {
+                      const target = albumMenuTarget;
+                      setAlbumMenuTarget(null);
+                      await lockAlbumContent(target.id);
+                    }}
+                  >
+                    <View style={[styles.menuIconWrap, { backgroundColor: theme.accent + '1A' }]}>
+                      <Ionicons name="lock-closed-outline" size={20} color={theme.accent} />
+                    </View>
+                    <View style={styles.menuRowInfo}>
+                      <Text style={[styles.menuRowLabel, { color: theme.text }]}>Lock Album</Text>
+                      <Text style={[styles.menuRowSublabel, { color: theme.textMuted }]}>
+                        Require biometrics to access this album
+                      </Text>
+                    </View>
+                  </Pressable>
+                )}
+
+                <View style={[styles.menuDivider, { backgroundColor: theme.border }]} />
+
+                <Pressable
+                  style={styles.menuRow}
+                  onPress={() => {
+                    const target = albumMenuTarget;
+                    setAlbumMenuTarget(null);
+                    handleRenameAlbum(target.id, target.title);
+                  }}
+                >
+                  <View style={[styles.menuIconWrap, { backgroundColor: theme.card }]}>
+                    <Ionicons name="pencil-outline" size={20} color={theme.text} />
+                  </View>
+                  <View style={styles.menuRowInfo}>
+                    <Text style={[styles.menuRowLabel, { color: theme.text }]}>Rename Album</Text>
+                  </View>
+                </Pressable>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
       {/* Rename Modal */}
       <Modal visible={renameVisible} transparent animationType="fade" onRequestClose={() => setRenameVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { backgroundColor: theme.surface }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Rename Album</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              {renameTarget ? `Rename "${renameTarget.title}"` : 'Rename Album'}
+            </Text>
             <TextInput
               style={[styles.modalInput, { color: theme.text, borderColor: theme.accent }]}
               value={renameText}
@@ -343,5 +430,51 @@ const styles = StyleSheet.create({
   modalBtn: {
     paddingVertical: 8,
     paddingHorizontal: 8,
+  },
+  menuBox: {
+    width: '85%',
+    maxWidth: 340,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  menuAlbumTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  menuIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  menuRowInfo: {
+    flex: 1,
+  },
+  menuRowLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  menuRowSublabel: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  menuDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 6,
   },
 });

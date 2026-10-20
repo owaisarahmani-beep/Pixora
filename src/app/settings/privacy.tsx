@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Switch, ScrollView, Pressable } from 'react-native';
-import { usePrivacyStore, LockPolicy } from '../../store/usePrivacyStore';
+import { usePrivacyStore } from '../../store/usePrivacyStore';
 import { useTheme } from '../../theme/ThemeProvider';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,10 +13,7 @@ export default function PrivacySettingsScreen() {
     isSupportedOnDevice,
     enableAppLock, 
     disableAppLock,
-    setLockPolicy,
-    privateAssetIds,
-    hiddenAlbumIds,
-    hiddenAssetIds
+    setLockPolicy
   } = usePrivacyStore();
 
   const toggleAppLock = async (value: boolean) => {
@@ -106,7 +103,7 @@ export default function PrivacySettingsScreen() {
           </View>
         </View>
 
-        {/* Private Vault */}
+        {/* Private Vault (Zero counts shown for privacy) */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>ENCRYPTED VAULT</Text>
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -124,55 +121,6 @@ export default function PrivacySettingsScreen() {
                 </Text>
               </View>
               <View style={styles.rowEnd}>
-                <View style={[styles.countBadge, { backgroundColor: theme.card }]}>
-                  <Text style={[styles.countText, { color: theme.textMuted }]}>
-                    {privateAssetIds.length}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
-              </View>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Hidden Media */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>HIDDEN ITEMS</Text>
-          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Pressable 
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              onPress={() => router.push('/settings/hidden-media')}
-            >
-              <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
-                <Ionicons name="images-outline" size={19} color={theme.text} />
-              </View>
-              <View style={styles.rowBody}>
-                <Text style={[styles.rowLabel, { color: theme.text }]}>Hidden Photos & Videos</Text>
-              </View>
-              <View style={styles.rowEnd}>
-                <View style={[styles.countBadge, { backgroundColor: theme.card }]}>
-                  <Text style={[styles.countText, { color: theme.textMuted }]}>{hiddenAssetIds.length}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
-              </View>
-            </Pressable>
-
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-            <Pressable 
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              onPress={() => router.push('/settings/hidden-albums')}
-            >
-              <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
-                <Ionicons name="folder-outline" size={19} color={theme.text} />
-              </View>
-              <View style={styles.rowBody}>
-                <Text style={[styles.rowLabel, { color: theme.text }]}>Hidden Albums</Text>
-              </View>
-              <View style={styles.rowEnd}>
-                <View style={[styles.countBadge, { backgroundColor: theme.card }]}>
-                  <Text style={[styles.countText, { color: theme.textMuted }]}>{hiddenAlbumIds.length}</Text>
-                </View>
                 <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
               </View>
             </Pressable>

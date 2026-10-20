@@ -11,9 +11,8 @@ export default function SettingsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
-  const { isAppLockEnabled, privateAssetIds, hiddenAlbumIds, hiddenAssetIds, archivedAssetIds } = usePrivacyStore();
+  const { isAppLockEnabled, archivedAssetIds } = usePrivacyStore();
   const trashCount = useTrashStore(state => state.items.length);
-  const hiddenTotalCount = hiddenAlbumIds.length + hiddenAssetIds.length;
 
   const themeOptions: { label: string; value: ThemePreference; icon: any }[] = [
     { label: 'System', value: 'system', icon: 'phone-portrait-outline' },
@@ -94,7 +93,7 @@ export default function SettingsScreen() {
 
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
-            {/* Private Vault */}
+            {/* Private Vault (No count shown for privacy) */}
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               onPress={() => router.push('/settings/private-vault')}
@@ -106,34 +105,6 @@ export default function SettingsScreen() {
                 <Text style={[styles.rowLabel, { color: theme.text }]}>Private Vault</Text>
               </View>
               <View style={styles.rowEnd}>
-                {privateAssetIds.length > 0 && (
-                  <View style={[styles.countBadge, { backgroundColor: theme.card }]}>
-                    <Text style={[styles.countText, { color: theme.textMuted }]}>{privateAssetIds.length}</Text>
-                  </View>
-                )}
-                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
-              </View>
-            </Pressable>
-
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-            {/* Hidden Content */}
-            <Pressable
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              onPress={() => router.push('/settings/hidden-media')}
-            >
-              <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
-                <Ionicons name="eye-off-outline" size={19} color={theme.text} />
-              </View>
-              <View style={styles.rowBody}>
-                <Text style={[styles.rowLabel, { color: theme.text }]}>Hidden Media & Albums</Text>
-              </View>
-              <View style={styles.rowEnd}>
-                {hiddenTotalCount > 0 && (
-                  <View style={[styles.countBadge, { backgroundColor: theme.card }]}>
-                    <Text style={[styles.countText, { color: theme.textMuted }]}>{hiddenTotalCount}</Text>
-                  </View>
-                )}
                 <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
               </View>
             </Pressable>
@@ -203,24 +174,6 @@ export default function SettingsScreen() {
                     <Text style={[styles.countText, { color: theme.textMuted }]}>{archivedAssetIds.length}</Text>
                   </View>
                 )}
-                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
-              </View>
-            </Pressable>
-
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-            {/* Slideshow */}
-            <Pressable
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              onPress={() => router.push({ pathname: '/slideshow', params: { source: 'all' } })}
-            >
-              <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
-                <Ionicons name="play-outline" size={19} color={theme.text} />
-              </View>
-              <View style={styles.rowBody}>
-                <Text style={[styles.rowLabel, { color: theme.text }]}>Slideshow</Text>
-              </View>
-              <View style={styles.rowEnd}>
                 <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
               </View>
             </Pressable>

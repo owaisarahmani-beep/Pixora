@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeProvider';
 import { useMediaStore } from '../store/useMediaStore';
 import { usePrivacyStore } from '../store/usePrivacyStore';
@@ -10,10 +9,10 @@ import { useSelectionStore } from '../store/useSelectionStore';
 import { useAuthorizedMedia } from '../hooks/useVisibleMedia';
 import { groupMediaByDate } from '../utils/dateGrouping';
 import PhotoGrid from '../components/gallery/PhotoGrid';
+import EmptyStateView from '../components/common/EmptyStateView';
 
 export default function ArchiveScreen() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
 
   const media = useMediaStore(state => state.media);
   const archivedAssetIds = usePrivacyStore(state => state.archivedAssetIds);
@@ -63,12 +62,13 @@ export default function ArchiveScreen() {
       />
 
       {groupedMedia.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="archive-outline" size={64} color={theme.textMuted} />
-          <Text style={[styles.emptyText, { color: theme.textMuted }]}>
-            No archived photos
-          </Text>
-        </View>
+        <EmptyStateView
+          icon="archive-outline"
+          title="No Archived Photos"
+          description="Photos and videos you archive are hidden from your main library grid, keeping your gallery clean and organized."
+          actionLabel="Return to Gallery"
+          onAction={() => router.back()}
+        />
       ) : (
         <PhotoGrid
           groupedMedia={groupedMedia}
