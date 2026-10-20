@@ -258,7 +258,7 @@ export default function StorageScreen() {
       <DeleteConfirmModal
         visible={deleteTarget !== null}
         title="Move to Trash?"
-        message={`Move "${deleteTarget?.asset.filename || 'this video'}" (${deleteTarget ? formatBytes(deleteTarget.sizeBytes) : ''}) to Recently Deleted? You can recover within 30 days.`}
+        message={`Free up ${deleteTarget ? formatBytes(deleteTarget.sizeBytes) : ''}. Recoverable from Trash within 30 days.`}
         confirmText="Move to Trash"
         onCancel={() => setDeleteTarget(null)}
         onConfirm={handleConfirmDelete}

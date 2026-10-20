@@ -65,7 +65,7 @@ export default function ArchiveScreen() {
         <EmptyStateView
           icon="archive-outline"
           title="No Archived Photos"
-          description="Photos and videos you archive are hidden from your main library grid, keeping your gallery clean and organized."
+          description="Archived photos are stored here without cluttering your main grid."
           actionLabel="Return to Gallery"
           onAction={() => router.back()}
         />

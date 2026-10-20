@@ -213,7 +213,7 @@ export default function ViewerControls({ item }: Props) {
       <DeleteConfirmModal
         visible={showDeleteModal}
         title={item.mediaType === 'video' ? 'Delete Video?' : 'Delete Photo?'}
-        message="This item will be moved to Recently Deleted. You can restore it anytime within 30 days."
+        message="You can restore this from Trash within 30 days."
         confirmText="Move to Trash"
         onCancel={() => setShowDeleteModal(false)}
         onConfirm={async () => {

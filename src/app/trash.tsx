@@ -74,8 +74,8 @@ export default function TrashScreen() {
     const count = selectedIds.size;
     setConfirmModal({
       visible: true,
-      title: 'Delete Forever?',
-      message: `Permanently delete ${count} selected item${count !== 1 ? 's' : ''}? This cannot be undone.`,
+      title: `Delete ${count} ${count !== 1 ? 'Items' : 'Item'} Forever?`,
+      message: 'This cannot be undone.',
       confirmText: 'Delete Permanently',
       onConfirm: async () => {
         const ids = Array.from(selectedIds);
@@ -98,7 +98,7 @@ export default function TrashScreen() {
     setConfirmModal({
       visible: true,
       title: 'Empty Trash?',
-      message: 'Permanently delete all items currently in trash? This action cannot be undone.',
+      message: 'All items will be permanently deleted.',
       confirmText: 'Empty Trash',
       onConfirm: async () => {
         for (const item of items) {
@@ -186,7 +186,7 @@ export default function TrashScreen() {
         <EmptyStateView
           icon="trash-outline"
           title="Trash is Empty"
-          description="Photos and videos you delete will stay here for 30 days before being permanently removed from your device."
+          description="Deleted items stay here for 30 days before permanent removal."
           actionLabel="Return to Gallery"
           onAction={() => router.back()}
         />

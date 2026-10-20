@@ -180,7 +180,7 @@ export default function GlobalSelectionBar({ tabBarHeight = 0 }: { tabBarHeight?
       <DeleteConfirmModal
         visible={deleteModalVisible}
         title={selectionContext === 'album' ? (count === 1 ? 'Delete Album?' : `Delete ${count} Albums?`) : (count === 1 ? 'Delete Photo?' : `Delete ${count} Items?`)}
-        message={selectionContext === 'album' ? 'Are you sure you want to delete the selected album?' : `Move ${count === 1 ? 'this item' : `${count} items`} to Recently Deleted? You can recover within 30 days.`}
+        message={selectionContext === 'album' ? undefined : 'Items can be recovered from Trash within 30 days.'}
         confirmText="Move to Trash"
         onCancel={() => setDeleteModalVisible(false)}
         onConfirm={handleConfirmDelete}
