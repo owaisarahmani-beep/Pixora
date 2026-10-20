@@ -7,7 +7,12 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "pixora",
-    "backgroundColor": "#10151F",
+    "backgroundColor": "#080A10",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#080A10"
+    },
     "plugins": [
       "expo-router",
       "expo-status-bar",
@@ -29,7 +34,7 @@
       "package": "com.pixora.gallery",
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundColor": "#10151F"
+        "backgroundColor": "#080A10"
       }
     },
     "web": {
