@@ -232,7 +232,7 @@ export default function StorageScreen() {
               <Pressable 
                 key={asset.id} 
                 style={[styles.videoCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                onPress={() => router.push(`/viewer/${asset.id}`)}
+                onPress={() => router.push({ pathname: '/viewer/[id]', params: { id: asset.id, source: 'gallery' } })}
               >
                 {/* Thumbnail */}
                 <View style={styles.thumbnailWrapper}>

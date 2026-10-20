@@ -30,6 +30,7 @@ import { useAuthorizedMedia, MediaContext } from '../../hooks/useVisibleMedia';
 
 export default function ViewerScreen() {
   const { id, source } = useLocalSearchParams();
+  const idStr = Array.isArray(id) ? id[0] : id;
   const pagerRef = useRef<PagerView>(null);
   
   const galleryMedia = useMediaStore(state => state.media);
@@ -64,48 +65,71 @@ export default function ViewerScreen() {
 
   const media = useAuthorizedMedia(rawMedia, authContext);
 
+  // Direct asset fallback to guarantee playback even if item is not in current paged list
+  const [directAsset, setDirectAsset] = useState<PixoraMediaInfo | null>(null);
+
+  useEffect(() => {
+    if (idStr && media.length === 0) {
+      const MediaLibrary = require('expo-media-library/legacy');
+      MediaLibrary.getAssetInfoAsync(idStr).then((asset: any) => {
+        if (asset) {
+          setDirectAsset({
+            id: asset.id,
+            uri: asset.localUri || asset.uri,
+            filename: asset.filename,
+            mediaType: asset.mediaType,
+            width: asset.width,
+            height: asset.height,
+            creationTime: asset.creationTime,
+            modificationTime: asset.modificationTime,
+            duration: asset.duration || 0,
+            albumId: asset.albumId,
+          });
+        }
+      }).catch(() => {});
+    }
+  }, [idStr, media.length]);
+
+  const effectiveMedia = useMemo(() => {
+    if (media.length > 0) return media;
+    if (directAsset) return [directAsset];
+    return [];
+  }, [media, directAsset]);
+
   const loadMoreMedia = isSearch || isFavorites ? () => {} : (isAlbum || isLockedAlbum) ? albumLoadMore : galleryLoadMore;
   const hasNextPage = isSearch || isFavorites ? false : (isAlbum || isLockedAlbum) ? albumHasNext : galleryHasNext;
 
   const { isZoomed, setIsZoomed, detailsVisible, setDetailsVisible } = useViewerStore();
   
   const initialIndex = useMemo(() => {
-    const idx = media.findIndex(m => m.id === id);
+    const idx = effectiveMedia.findIndex(m => m.id === idStr);
     return idx >= 0 ? idx : 0;
-  }, [id, media]);
+  }, [idStr, effectiveMedia]);
 
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
-  // Guarantee clean viewer state on mount/unmount
+  // Sync index if media loads after mount
   useEffect(() => {
-    setIsZoomed(false);
-    setDetailsVisible(false);
-    return () => {
-      setIsZoomed(false);
-      setDetailsVisible(false);
-    };
-  }, [setIsZoomed, setDetailsVisible]);
-
-  useEffect(() => {
-    ScreenOrientation.unlockAsync().catch(() => {});
-    if (Platform.OS === 'android') {
-      try {
-        const NavigationBar = require('expo-navigation-bar');
-        NavigationBar?.setVisibilityAsync?.('hidden')?.catch(() => {});
-      } catch (e) {}
-    }
-    return () => {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
-      if (Platform.OS === 'android') {
-        try {
-          const NavigationBar = require('expo-navigation-bar');
-          NavigationBar?.setVisibilityAsync?.('visible')?.catch(() => {});
-        } catch (e) {}
+    if (idStr) {
+      const idx = effectiveMedia.findIndex(m => m.id === idStr);
+      if (idx >= 0 && idx !== currentIndex) {
+        setCurrentIndex(idx);
       }
-    };
-  }, []);
+    }
+  }, [idStr, effectiveMedia]);
 
-  const currentMedia = media[currentIndex];
+  // Keep last known valid media ref so viewer NEVER drops to "Media not found" on transient updates
+  const lastValidMediaRef = useRef<PixoraMediaInfo | null>(null);
+
+  const safeIndex = Math.max(0, Math.min(currentIndex, Math.max(0, effectiveMedia.length - 1)));
+  const currentMedia = effectiveMedia[safeIndex] 
+    || effectiveMedia.find(m => m.id === idStr) 
+    || directAsset 
+    || lastValidMediaRef.current;
+
+  if (currentMedia) {
+    lastValidMediaRef.current = currentMedia;
+  }
   
   const translateY = useSharedValue(0);
   const translateX = useSharedValue(0);
@@ -137,14 +161,16 @@ export default function ViewerScreen() {
 
   const handlePageSelected = (e: any) => {
     const newIndex = e.nativeEvent.position;
-    setCurrentIndex(newIndex);
-    setIsZoomed(false);
-    if (detailsVisible) {
-      handleCloseDetails();
-    }
-    
-    if (newIndex >= media.length - 10 && hasNextPage) {
-      loadMoreMedia();
+    if (typeof newIndex === 'number' && newIndex >= 0 && newIndex < effectiveMedia.length) {
+      setCurrentIndex(newIndex);
+      setIsZoomed(false);
+      if (detailsVisible) {
+        handleCloseDetails();
+      }
+      
+      if (newIndex >= effectiveMedia.length - 10 && hasNextPage) {
+        loadMoreMedia();
+      }
     }
   };
 
@@ -247,7 +273,7 @@ export default function ViewerScreen() {
             scrollEnabled={!isZoomed}
             offscreenPageLimit={1}
           >
-            {media.map((item, index) => {
+            {effectiveMedia.map((item, index) => {
               if (Math.abs(index - currentIndex) > 2) {
                 return <View key={item.id} />;
               }
@@ -287,8 +313,22 @@ MediaPage.displayName = 'MediaPage';
 const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolean }) => {
   const insets = useSafeAreaInsets();
   const player = useVideoPlayer(item.uri, (p) => {
-    p.loop = true;
+    p.loop = false;
   });
+
+  // When video completes, gracefully pause and reset position to 0 so it's ready to replay
+  useEffect(() => {
+    const subscription = player.addListener('playToEnd', () => {
+      try {
+        player.pause();
+        player.currentTime = 0;
+      } catch (e) {}
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [player]);
 
   // Pause when swiping away
   useEffect(() => {
