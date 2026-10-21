@@ -1,9 +1,10 @@
-import React, { memo } from 'react';
-import { View, Text, StyleSheet, Dimensions, Pressable, useWindowDimensions } from 'react-native';
+import React, { memo, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
-import { PixoraMediaInfo } from '../../services/media/mediaTypes';
 import { Ionicons } from '@expo/vector-icons';
+import { PixoraMediaInfo } from '../../services/media/mediaTypes';
+import { useSelectionStore } from '../../store/useSelectionStore';
 
 interface Props {
   item: PixoraMediaInfo;
@@ -21,8 +22,6 @@ function formatDuration(duration: number) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-import { useSelectionStore } from '../../store/useSelectionStore';
-
 const PhotoThumbnail = ({ item, numColumns, itemSize: propItemSize, source = 'gallery', allIds = [] }: Props) => {
   const { width } = useWindowDimensions();
   const itemSize = propItemSize ?? Math.max(10, (width - SPACING * (numColumns - 1)) / numColumns);
@@ -31,8 +30,13 @@ const PhotoThumbnail = ({ item, numColumns, itemSize: propItemSize, source = 'ga
   const isSelected = useSelectionStore(state => state.isSelected(item.id));
   const enterSelectionMode = useSelectionStore(state => state.enterSelectionMode);
   const toggleSelection = useSelectionStore(state => state.toggleSelection);
+  const lastPressTimeRef = useRef(0);
 
   const handlePress = () => {
+    const now = Date.now();
+    if (now - lastPressTimeRef.current < 400) return;
+    lastPressTimeRef.current = now;
+
     if (isSelectionMode) {
       toggleSelection(item.id);
     } else {

@@ -269,12 +269,13 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
     lastIndexRef.current = -1;
   }, [stopAutoScroll]);
 
-  // Pan gesture with 200ms stationary activation threshold
-  // Quick vertical swipes (<200ms) fail this gesture immediately, allowing 60fps FlashList native scrolling.
-  // Holding for 200ms activates smooth drag selection across photos.
+  // Pan drag-to-select gesture:
+  // ONLY enabled when isSelectionMode is true, guaranteeing that normal browsing, scrolling,
+  // and dragging down NEVER accidentally triggers selection mode or selects photos.
+  // Once in selection mode, dragging across photos provides smooth, multi-item selection with edge auto-scroll.
   const panGesture = useMemo(() => {
     return Gesture.Pan()
-      .activateAfterLongPress(200)
+      .enabled(isSelectionMode)
       .minDistance(4)
       .onStart((e) => {
         runOnJS(handleDragStart)(e.x, e.y);
@@ -288,7 +289,7 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
       .onFinalize(() => {
         runOnJS(handleDragEnd)();
       });
-  }, [handleDragStart, handleDragUpdate, handleDragEnd]);
+  }, [isSelectionMode, handleDragStart, handleDragUpdate, handleDragEnd]);
 
   const renderItem = ({ item }: { item: ListItem }) => {
     if (item.type === 'header') {

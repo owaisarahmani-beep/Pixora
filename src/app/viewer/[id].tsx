@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, Platform } from 'react-native';
+import { View, StyleSheet, Text, BackHandler } from 'react-native';
 import { useLocalSearchParams, Stack, router } from 'expo-router';
 import PagerView from 'react-native-pager-view';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -15,7 +15,6 @@ import Animated, {
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import * as ScreenOrientation from 'expo-screen-orientation';
 import { useMediaStore } from '../../store/useMediaStore';
 import { useViewerStore } from '../../store/useViewerStore';
 import { PixoraMediaInfo } from '../../services/media/mediaTypes';
@@ -108,28 +107,23 @@ export default function ViewerScreen() {
 
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
-  // Sync index if media loads after mount
+  // Sync index if media loads after mount and guarantee native PagerView is synchronized
   useEffect(() => {
-    if (idStr) {
+    if (idStr && effectiveMedia.length > 0) {
       const idx = effectiveMedia.findIndex(m => m.id === idStr);
-      if (idx >= 0 && idx !== currentIndex) {
-        setCurrentIndex(idx);
+      if (idx >= 0) {
+        queueMicrotask(() => {
+          setCurrentIndex(prev => (prev !== idx ? idx : prev));
+        });
+        pagerRef.current?.setPageWithoutAnimation(idx);
       }
     }
   }, [idStr, effectiveMedia]);
 
-  // Keep last known valid media ref so viewer NEVER drops to "Media not found" on transient updates
-  const lastValidMediaRef = useRef<PixoraMediaInfo | null>(null);
-
   const safeIndex = Math.max(0, Math.min(currentIndex, Math.max(0, effectiveMedia.length - 1)));
   const currentMedia = effectiveMedia[safeIndex] 
     || effectiveMedia.find(m => m.id === idStr) 
-    || directAsset 
-    || lastValidMediaRef.current;
-
-  if (currentMedia) {
-    lastValidMediaRef.current = currentMedia;
-  }
+    || directAsset;
   
   const translateY = useSharedValue(0);
   const translateX = useSharedValue(0);
@@ -137,8 +131,23 @@ export default function ViewerScreen() {
   const detailsProgress = useSharedValue(0);
 
   const handleDismiss = useCallback(() => {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
   }, []);
+
+  // Android hardware & bottom system navigation bar back button:
+  // Directly exits the viewer and returns to the calling screen (Home tab or Album)
+  useEffect(() => {
+    const onBackPress = () => {
+      handleDismiss();
+      return true;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [handleDismiss]);
 
   const handleCloseDetails = useCallback(() => {
     setDetailsVisible(false);
