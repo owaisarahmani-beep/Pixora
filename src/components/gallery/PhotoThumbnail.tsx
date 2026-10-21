@@ -10,8 +10,10 @@ interface Props {
   item: PixoraMediaInfo;
   numColumns: number;
   itemSize?: number;
-  source?: 'gallery' | 'search' | 'favorites' | 'album' | 'locked' | 'archive' | 'hidden' | 'private';
+  source?: 'gallery' | 'search' | 'favorites' | 'album' | 'locked' | 'archive' | 'hidden' | 'private' | 'smart_album';
   allIds?: string[];
+  filterType?: 'all' | 'photo' | 'video';
+  smartAlbumId?: string;
 }
 
 const SPACING = 2;
@@ -22,7 +24,15 @@ function formatDuration(duration: number) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-const PhotoThumbnail = ({ item, numColumns, itemSize: propItemSize, source = 'gallery', allIds = [] }: Props) => {
+const PhotoThumbnail = ({ 
+  item, 
+  numColumns, 
+  itemSize: propItemSize, 
+  source = 'gallery', 
+  allIds = [],
+  filterType,
+  smartAlbumId,
+}: Props) => {
   const { width } = useWindowDimensions();
   const itemSize = propItemSize ?? Math.max(10, (width - SPACING * (numColumns - 1)) / numColumns);
   
@@ -40,7 +50,15 @@ const PhotoThumbnail = ({ item, numColumns, itemSize: propItemSize, source = 'ga
     if (isSelectionMode) {
       toggleSelection(item.id);
     } else {
-      router.push({ pathname: `/viewer/[id]`, params: { id: item.id, source } });
+      router.push({ 
+        pathname: `/viewer/[id]`, 
+        params: { 
+          id: item.id, 
+          source,
+          ...(filterType && filterType !== 'all' ? { filter: filterType } : {}),
+          ...(smartAlbumId ? { smartAlbumId } : {}),
+        } 
+      });
     }
   };
 

@@ -27,10 +27,13 @@ import { useSearchStore } from '../../store/useSearchStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useAlbumsStore } from '../../store/useAlbumsStore';
 import { useAuthorizedMedia, MediaContext } from '../../hooks/useVisibleMedia';
+import { SMART_ALBUM_DEFS } from '../../hooks/useSmartAlbums';
 
 export default function ViewerScreen() {
-  const { id, source } = useLocalSearchParams();
+  const { id, source, filter, smartAlbumId } = useLocalSearchParams();
   const idStr = Array.isArray(id) ? id[0] : id;
+  const filterStr = Array.isArray(filter) ? filter[0] : (filter as string);
+  const smartAlbumIdStr = Array.isArray(smartAlbumId) ? smartAlbumId[0] : (smartAlbumId as string);
   const pagerRef = useRef<PagerView>(null);
   
   const galleryMedia = useMediaStore(state => state.media);
@@ -52,8 +55,28 @@ export default function ViewerScreen() {
   const isHidden = source === 'hidden';
   const isPrivate = source === 'private';
   const isArchive = source === 'archive';
+  const isSmartAlbum = source === 'smart_album';
   
-  const rawMedia = isSearch ? searchMedia : isFavorites ? favoritesMedia : (isAlbum || isLockedAlbum) ? albumMediaInfo : galleryMedia;
+  const baseMedia = useMemo(() => {
+    if (isSearch) return searchMedia;
+    if (isFavorites) return favoritesMedia;
+    if (isAlbum || isLockedAlbum) return albumMediaInfo;
+    if (isSmartAlbum && smartAlbumIdStr) {
+      const def = SMART_ALBUM_DEFS.find(d => d.id === smartAlbumIdStr);
+      if (def) return galleryMedia.filter(def.filter);
+    }
+    return galleryMedia;
+  }, [isSearch, searchMedia, isFavorites, favoritesMedia, isAlbum, isLockedAlbum, albumMediaInfo, isSmartAlbum, smartAlbumIdStr, galleryMedia]);
+
+  const rawMedia = useMemo(() => {
+    if (filterStr === 'video') {
+      return baseMedia.filter(m => m.mediaType === 'video');
+    }
+    if (filterStr === 'photo') {
+      return baseMedia.filter(m => m.mediaType === 'photo');
+    }
+    return baseMedia;
+  }, [baseMedia, filterStr]);
   
   const authContext: MediaContext = useMemo(() => {
     if (isPrivate) return 'private';
@@ -158,22 +181,22 @@ export default function ViewerScreen() {
 
   const handleCloseDetails = useCallback(() => {
     setDetailsVisible(false);
-    detailsProgress.value = withSpring(0, { damping: 22, stiffness: 220 });
-    translateY.value = withSpring(0, { damping: 22, stiffness: 220 });
-  }, [setDetailsVisible, detailsProgress, translateY]);
+    detailsProgress.value = withTiming(0, { duration: 200 });
+    translateY.value = 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setDetailsVisible]);
 
-  // Sync detailsVisible state from menu actions with spring animation
+  // Sync detailsVisible state from menu actions
   useEffect(() => {
     if (detailsVisible) {
       detailsProgress.value = withSpring(1, { damping: 22, stiffness: 200 });
-      translateY.value = withSpring(-100, { damping: 22, stiffness: 200 });
+      translateY.value = 0;
     } else {
-      detailsProgress.value = withSpring(0, { damping: 22, stiffness: 220 });
-      if (translateY.value < 0) {
-        translateY.value = withSpring(0, { damping: 22, stiffness: 220 });
-      }
+      detailsProgress.value = withTiming(0, { duration: 200 });
+      translateY.value = 0;
     }
-  }, [detailsVisible, detailsProgress, translateY]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailsVisible]);
 
   const handlePageSelected = (e: any) => {
     const newIndex = e.nativeEvent.position;
@@ -192,7 +215,7 @@ export default function ViewerScreen() {
 
   // Fluid vertical drag handler:
   // - Downwards: Smooth drag to dismiss with scaling & fade
-  // - Upwards: 1:1 tactile tracking that pulls up the Details sheet directly under the finger
+  // - Upwards: 1:1 tactile tracking that pulls up the Details sheet, keeping the image completely still
   const verticalDrag = Gesture.Pan()
     .enabled(!isZoomed)
     .maxPointers(1)
@@ -204,13 +227,15 @@ export default function ViewerScreen() {
       if (e.translationY > 0) {
         // Dragging down (Dismiss gesture)
         translateY.value = e.translationY;
-        translateX.value = e.translationX * 0.25;
+        translateX.value = e.translationX * 0.2;
         scale.value = Math.max(0.75, 1 - (e.translationY / 1200));
         detailsProgress.value = 0;
       } else {
-        // Dragging up: 1:1 tactile tracking that brings up the details sheet
-        translateY.value = e.translationY * 0.45;
-        detailsProgress.value = Math.min(1, Math.max(0, -e.translationY / 240));
+        // Dragging up: tactile tracking that brings up details sheet — photo stays still!
+        translateY.value = 0;
+        translateX.value = 0;
+        scale.value = 1;
+        detailsProgress.value = Math.min(1, Math.max(0, -e.translationY / 260));
       }
     })
     .onEnd((e) => {
@@ -221,16 +246,16 @@ export default function ViewerScreen() {
           runOnJS(handleDismiss)();
         });
       } else if (e.translationY < -60 || e.velocityY < -500) {
-        // Dragged up far enough -> snap details sheet open with spring physics
+        // Dragged up far enough -> snap details sheet open
         detailsProgress.value = withSpring(1, { damping: 22, stiffness: 200 });
-        translateY.value = withSpring(-100, { damping: 22, stiffness: 200 });
+        translateY.value = 0;
         runOnJS(setDetailsVisible)(true);
       } else {
-        // Cancel -> smoothly spring back into place
-        translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
-        translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
-        scale.value = withSpring(1, { damping: 20, stiffness: 200 });
-        detailsProgress.value = withSpring(0, { damping: 20, stiffness: 200 });
+        // Cancel -> smoothly animate back without any spring shake/wobble
+        translateY.value = withTiming(0, { duration: 180 });
+        translateX.value = withTiming(0, { duration: 180 });
+        scale.value = withTiming(1, { duration: 180 });
+        detailsProgress.value = withTiming(0, { duration: 180 });
         runOnJS(setDetailsVisible)(false);
       }
     });
@@ -262,7 +287,7 @@ export default function ViewerScreen() {
       Extrapolation.CLAMP
     );
     return {
-      opacity: detailsProgress.value > 0.1 ? 0 : opacity,
+      opacity,
     };
   });
 
@@ -303,7 +328,7 @@ export default function ViewerScreen() {
           style={[StyleSheet.absoluteFill, controlsAnimatedStyle]} 
           pointerEvents="box-none"
         >
-          <ViewerControls item={currentMedia} />
+          <ViewerControls item={currentMedia} detailsProgress={detailsProgress} />
         </Animated.View>
 
         {/* Integrated Fluid Details Bottom Sheet */}
@@ -363,6 +388,9 @@ const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolea
           player={player}
           nativeControls
           contentFit="contain"
+          fullscreenOptions={{
+            enable: false,
+          }}
           buttonOptions={{
             showNext: false,
             showPrevious: false,

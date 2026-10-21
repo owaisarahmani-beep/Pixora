@@ -218,6 +218,7 @@ export default function PhotosScreen() {
         isRefreshing={isRefreshing}
         onRefresh={refreshMedia}
         source="gallery"
+        filterType={filterType}
       />
     </View>
   );

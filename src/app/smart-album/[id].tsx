@@ -66,7 +66,8 @@ export default function SmartAlbumScreen() {
           onEndReached={() => {}}
           isRefreshing={false}
           onRefresh={() => {}}
-          source="gallery"
+          source="smart_album"
+          smartAlbumId={id}
         />
       )}
     </View>

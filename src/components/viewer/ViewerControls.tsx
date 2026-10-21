@@ -3,7 +3,14 @@ import { View, Text, StyleSheet, Pressable, Modal, TouchableWithoutFeedback, Ale
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { useAnimatedStyle, withTiming, useSharedValue } from 'react-native-reanimated';
+import Animated, { 
+  useAnimatedStyle, 
+  withTiming, 
+  useSharedValue, 
+  interpolate, 
+  Extrapolation, 
+  SharedValue 
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PixoraMediaInfo } from '../../services/media/mediaTypes';
 import { useViewerStore } from '../../store/useViewerStore';
@@ -14,9 +21,10 @@ import DeleteConfirmModal from '../common/DeleteConfirmModal';
 
 interface Props {
   item: PixoraMediaInfo;
+  detailsProgress?: SharedValue<number>;
 }
 
-export default function ViewerControls({ item }: Props) {
+export default function ViewerControls({ item, detailsProgress }: Props) {
   const router = useRouter();
   const params = useLocalSearchParams();
   const source = Array.isArray(params.source) ? params.source[0] : (params.source as string) || 'gallery';
@@ -37,6 +45,32 @@ export default function ViewerControls({ item }: Props) {
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
   }));
+
+  const topBarAnimatedStyle = useAnimatedStyle(() => {
+    if (!detailsProgress) return {};
+    const topOpacity = interpolate(
+      detailsProgress.value,
+      [0, 0.4],
+      [1, 0],
+      Extrapolation.CLAMP
+    );
+    return {
+      opacity: topOpacity,
+    };
+  });
+
+  const bottomBarAnimatedStyle = useAnimatedStyle(() => {
+    if (!detailsProgress) return {};
+    const translateY = interpolate(
+      detailsProgress.value,
+      [0, 1],
+      [0, -380],
+      Extrapolation.CLAMP
+    );
+    return {
+      transform: [{ translateY }],
+    };
+  });
 
   const handleShare = async () => {
     try {
@@ -121,17 +155,17 @@ export default function ViewerControls({ item }: Props) {
     <>
       <Animated.View style={[styles.container, animatedStyle]} pointerEvents={controlsVisible ? 'box-none' : 'none'}>
         {/* Top Bar: Back & More */}
-        <View style={[styles.topBar, { paddingTop: insets.top || 20 }]}>
+        <Animated.View style={[styles.topBar, { paddingTop: insets.top || 20 }, topBarAnimatedStyle]}>
           <Pressable onPress={() => router.back()} style={styles.iconButton} accessibilityRole="button">
             <Ionicons name="arrow-back" size={24} color="#FFF" />
           </Pressable>
           <Pressable onPress={openMoreMenu} style={styles.iconButton} accessibilityRole="button">
             <Ionicons name="ellipsis-vertical" size={24} color="#FFF" />
           </Pressable>
-        </View>
+        </Animated.View>
 
         {/* Bottom Bar: 4 Primary Icon Actions (Favorite, Edit, Share, Delete) */}
-        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <Animated.View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }, bottomBarAnimatedStyle]}>
           <View style={styles.bottomBarInner}>
             {/* 1. Favorite */}
             <Pressable onPress={() => toggleFavorite(item.id, item)} style={styles.actionButton} hitSlop={12}>
@@ -163,7 +197,7 @@ export default function ViewerControls({ item }: Props) {
               <Ionicons name="trash-outline" size={26} color="#EF4444" />
             </Pressable>
           </View>
-        </View>
+        </Animated.View>
       </Animated.View>
 
       {/* Android Custom More Menu */}

@@ -15,7 +15,9 @@ interface Props {
   onEndReached: () => void;
   isRefreshing: boolean;
   onRefresh: () => void;
-  source?: 'gallery' | 'search' | 'favorites' | 'album' | 'locked' | 'archive' | 'hidden' | 'private';
+  source?: 'gallery' | 'search' | 'favorites' | 'album' | 'locked' | 'archive' | 'hidden' | 'private' | 'smart_album';
+  filterType?: 'all' | 'photo' | 'video';
+  smartAlbumId?: string;
 }
 
 type ListItem = 
@@ -33,7 +35,15 @@ const NUM_COLUMNS = 4;
 const SPACING = 2;
 const HEADER_HEIGHT = 46;
 
-export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, onRefresh, source = 'gallery' }: Props) {
+export default function PhotoGrid({ 
+  groupedMedia, 
+  onEndReached, 
+  isRefreshing, 
+  onRefresh, 
+  source = 'gallery',
+  filterType,
+  smartAlbumId,
+}: Props) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const itemSize = Math.max(10, Math.floor((width - SPACING * (NUM_COLUMNS - 1)) / NUM_COLUMNS));
@@ -331,6 +341,8 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
             numColumns={NUM_COLUMNS}
             source={source}
             allIds={allIds}
+            filterType={filterType}
+            smartAlbumId={smartAlbumId}
           />
         ))}
       </View>
