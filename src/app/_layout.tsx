@@ -5,6 +5,7 @@ import { ThemeProvider, useTheme } from '../theme/ThemeProvider';
 import PrivacyGuard from '../components/privacy/PrivacyGuard';
 import { Platform } from 'react-native';
 import { useEffect } from 'react';
+import * as NavigationBar from 'expo-navigation-bar';
 
 function RootNavigation() {
   const theme = useTheme();
@@ -48,14 +49,11 @@ export default function RootLayout() {
   useEffect(() => {
     if (Platform.OS === 'android') {
       try {
-        const NavigationBar = require('expo-navigation-bar');
         if (NavigationBar?.setVisibilityAsync) {
           NavigationBar.setVisibilityAsync('hidden').catch(() => {});
-        } else if (NavigationBar?.setHidden) {
-          NavigationBar.setHidden(true);
         }
-      } catch (e) {
-        // Safe fallback for builds without expo-navigation-bar
+      } catch {
+        // Safe fallback for builds without navigation bar support
       }
     }
   }, []);

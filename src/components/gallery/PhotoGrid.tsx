@@ -121,7 +121,9 @@ export default function PhotoGrid({ groupedMedia, onEndReached, isRefreshing, on
   }, [data, rowHeight]);
 
   const itemLayoutsRef = useRef(itemLayouts);
-  itemLayoutsRef.current = itemLayouts;
+  useEffect(() => {
+    itemLayoutsRef.current = itemLayouts;
+  }, [itemLayouts]);
 
   // Ultra-fast O(log N) binary search for the photo under coordinate (x, y)
   const getItemAtPosition = useCallback((touchX: number, touchY: number): PixoraMediaInfo | null => {

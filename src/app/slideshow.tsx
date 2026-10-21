@@ -12,7 +12,6 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMediaStore } from '../store/useMediaStore';
-import { usePrivacyStore } from '../store/usePrivacyStore';
 import { useAuthorizedMedia } from '../hooks/useVisibleMedia';
 import { SMART_ALBUM_DEFS } from '../hooks/useSmartAlbums';
 import { PixoraMediaInfo } from '../services/media/mediaTypes';
@@ -92,11 +91,6 @@ export default function SlideshowScreen() {
     };
   }, [isHolding, advance, slides.length, currentIndex]);
 
-  // Reset index when slides list changes
-  useEffect(() => {
-    setCurrentIndex(0);
-  }, [slides.length]);
-
   const handlePress = (evt: any) => {
     const x = evt.nativeEvent.locationX;
     // Left 30% goes to previous slide
@@ -108,7 +102,8 @@ export default function SlideshowScreen() {
     }
   };
 
-  const currentSlide = slides[currentIndex];
+  const safeIndex = slides.length > 0 ? Math.min(currentIndex, slides.length - 1) : 0;
+  const currentSlide = slides[safeIndex];
 
   if (slides.length === 0) {
     return (

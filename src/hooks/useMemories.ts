@@ -39,7 +39,7 @@ export function useMemories(allMedia: PixoraMediaInfo[]): Memory[] {
           id: `on-this-day-${year}`,
           title: 'On This Day',
           subtitle: `${yearsAgo} year${yearsAgo > 1 ? 's' : ''} ago`,
-          coverAsset: assets[Math.floor(Math.random() * assets.length)],
+          coverAsset: assets[0],
           assets,
         });
       });

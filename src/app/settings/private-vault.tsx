@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { usePrivacyStore } from '../../store/usePrivacyStore';
 import { useMediaStore } from '../../store/useMediaStore';
@@ -13,22 +13,22 @@ export default function PrivateVaultScreen() {
   const theme = useTheme();
   const { isVaultUnlocked, unlockVault, privateAssetIds, removeAssetsFromPrivate } = usePrivacyStore();
   const allMedia = useMediaStore(state => state.media);
-  const [authAttempted, setAuthAttempted] = useState(false);
+  const authAttemptedRef = useRef(false);
 
   // Phase 4: Secure screen in background
   useSecureScreen(true);
 
   // Phase 4: Authentication Session
   useEffect(() => {
-    if (!isVaultUnlocked && !authAttempted) {
-      setAuthAttempted(true);
+    if (!isVaultUnlocked && !authAttemptedRef.current) {
+      authAttemptedRef.current = true;
       unlockVault().then(success => {
         if (!success) {
           router.back();
         }
       });
     }
-  }, [isVaultUnlocked, authAttempted]);
+  }, [isVaultUnlocked, unlockVault]);
 
   if (!isVaultUnlocked) {
     return (

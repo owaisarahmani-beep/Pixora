@@ -1,7 +1,8 @@
 import { create } from 'zustand';
+import * as MediaLibrary from 'expo-media-library';
 import { mediaStoreService } from '../services/media/MediaStoreService';
 import { PixoraMediaInfo, MediaGroup, MediaPermissionStatus } from '../services/media/mediaTypes';
-import { groupMediaByDate } from '../utils/dateGrouping';
+import { useTrashStore } from './useTrashStore';
 
 interface MediaState {
   permissionStatus: MediaPermissionStatus;
@@ -118,7 +119,7 @@ export const useMediaStore = create<MediaState>((set, get) => ({
         }
       }
       set({ isRefreshing: false });
-    } catch (error) {
+    } catch {
       set({ isRefreshing: false });
     }
   },
@@ -130,12 +131,11 @@ export const useMediaStore = create<MediaState>((set, get) => ({
       if (!item) return false;
 
       // Soft-delete: move to Pixora trash (30-day recovery)
-      const { useTrashStore } = require('./useTrashStore');
       useTrashStore.getState().moveToTrash({
         id: item.id,
         uri: item.uri,
         filename: item.filename,
-        mediaType: item.mediaType,
+        mediaType: item.mediaType === 'video' ? 'video' : 'photo',
         width: item.width,
         height: item.height,
         creationTime: item.creationTime,
@@ -156,7 +156,6 @@ export const useMediaStore = create<MediaState>((set, get) => ({
 
   permanentDeleteAsync: async (id: string) => {
     try {
-      const MediaLibrary = require('expo-media-library');
       await MediaLibrary.deleteAssetsAsync([id]);
       const { media } = get();
       const updatedMedia = media.filter(m => m.id !== id);

@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useLocalSearchParams, Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useMediaStore } from '../../store/useMediaStore';
 import { useAuthorizedMedia } from '../../hooks/useVisibleMedia';
@@ -13,7 +12,6 @@ import PhotoGrid from '../../components/gallery/PhotoGrid';
 export default function SmartAlbumScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
 
   const allMedia = useMediaStore(state => state.media);
 

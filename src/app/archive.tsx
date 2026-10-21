@@ -48,16 +48,17 @@ export default function ArchiveScreen() {
               <Ionicons name="arrow-back" size={24} color={theme.text} />
             </Pressable>
           ),
-          headerRight: () => (
-            <Pressable onPress={handleUnarchive} style={styles.headerBtn}>
-              <Ionicons name="eye-outline" size={22} color={theme.accent} />
-              <Text style={[styles.headerBtnText, { color: theme.accent }]}>
-                {isSelectionMode && selectedIds.size > 0
-                  ? `Unarchive (${selectedIds.size})`
-                  : 'Unarchive All'}
-              </Text>
-            </Pressable>
-          ),
+          headerRight: () =>
+            archivedAssetIds.length > 0 ? (
+              <Pressable onPress={handleUnarchive} style={styles.headerBtn}>
+                <Ionicons name="eye-outline" size={22} color={theme.accent} />
+                <Text style={[styles.headerBtnText, { color: theme.accent }]}>
+                  {isSelectionMode && selectedIds.size > 0
+                    ? `Unarchive (${selectedIds.size})`
+                    : 'Unarchive All'}
+                </Text>
+              </Pressable>
+            ) : null,
         }}
       />
 

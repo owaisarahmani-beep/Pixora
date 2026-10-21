@@ -14,6 +14,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as MediaLibrary from 'expo-media-library';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useMediaStore } from '../../store/useMediaStore';
 import { useViewerStore } from '../../store/useViewerStore';
@@ -68,15 +69,14 @@ export default function ViewerScreen() {
   const [directAsset, setDirectAsset] = useState<PixoraMediaInfo | null>(null);
 
   useEffect(() => {
-    if (idStr && media.length === 0) {
-      const MediaLibrary = require('expo-media-library/legacy');
-      MediaLibrary.getAssetInfoAsync(idStr).then((asset: any) => {
+    if (idStr && !media.some(m => m.id === idStr)) {
+      MediaLibrary.getAssetInfoAsync(idStr).then((asset) => {
         if (asset) {
           setDirectAsset({
             id: asset.id,
             uri: asset.localUri || asset.uri,
             filename: asset.filename,
-            mediaType: asset.mediaType,
+            mediaType: asset.mediaType as any,
             width: asset.width,
             height: asset.height,
             creationTime: asset.creationTime,
@@ -87,13 +87,18 @@ export default function ViewerScreen() {
         }
       }).catch(() => {});
     }
-  }, [idStr, media.length]);
+  }, [idStr, media]);
 
   const effectiveMedia = useMemo(() => {
-    if (media.length > 0) return media;
+    if (media.length > 0) {
+      if (idStr && !media.some(m => m.id === idStr) && directAsset) {
+        return [directAsset, ...media];
+      }
+      return media;
+    }
     if (directAsset) return [directAsset];
     return [];
-  }, [media, directAsset]);
+  }, [media, directAsset, idStr]);
 
   const loadMoreMedia = isSearch || isFavorites ? () => {} : (isAlbum || isLockedAlbum) ? albumLoadMore : galleryLoadMore;
   const hasNextPage = isSearch || isFavorites ? false : (isAlbum || isLockedAlbum) ? albumHasNext : galleryHasNext;
@@ -107,13 +112,15 @@ export default function ViewerScreen() {
 
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
-  // Sync index if media loads after mount and guarantee native PagerView is synchronized
+  // Sync index once when media loads and guarantee native PagerView is synchronized
+  const initialSyncDoneRef = useRef(false);
   useEffect(() => {
-    if (idStr && effectiveMedia.length > 0) {
+    if (!initialSyncDoneRef.current && idStr && effectiveMedia.length > 0) {
       const idx = effectiveMedia.findIndex(m => m.id === idStr);
       if (idx >= 0) {
+        initialSyncDoneRef.current = true;
         queueMicrotask(() => {
-          setCurrentIndex(prev => (prev !== idx ? idx : prev));
+          setCurrentIndex(idx);
         });
         pagerRef.current?.setPageWithoutAnimation(idx);
       }
@@ -331,7 +338,7 @@ const VideoPage = ({ item, isActive }: { item: PixoraMediaInfo, isActive: boolea
       try {
         player.pause();
         player.currentTime = 0;
-      } catch (e) {}
+      } catch {}
     });
 
     return () => {

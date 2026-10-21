@@ -14,8 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeProvider';
 import { useTrashStore, TrashedItem } from '../store/useTrashStore';
+import { useMediaStore } from '../store/useMediaStore';
 import DeleteConfirmModal from '../components/common/DeleteConfirmModal';
 import EmptyStateView from '../components/common/EmptyStateView';
+import * as MediaLibrary from 'expo-media-library';
 
 const NUM_COLUMNS = 3;
 const GAP = 2;
@@ -30,7 +32,7 @@ export default function TrashScreen() {
   const restoreItems = useTrashStore(state => state.restoreItems);
   const permanentlyDelete = useTrashStore(state => state.permanentlyDelete);
   const getDaysRemaining = useTrashStore(state => state.getDaysRemaining);
-  const { permanentDeleteAsync } = require('../store/useMediaStore').useMediaStore.getState();
+  const refreshMedia = useMediaStore(state => state.refreshMedia);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const isSelectionMode = selectedIds.size > 0;
@@ -65,9 +67,12 @@ export default function TrashScreen() {
     setSelectedIds(new Set([id]));
   }, []);
 
-  const handleRestore = () => {
-    restoreItems(Array.from(selectedIds));
+  const handleRestore = async () => {
+    const ids = Array.from(selectedIds);
+    restoreItems(ids);
     setSelectedIds(new Set());
+    await refreshMedia();
+    Alert.alert('Restored', `${ids.length} ${ids.length !== 1 ? 'items' : 'item'} restored to gallery.`);
   };
 
   const handleDeleteForever = () => {
@@ -81,7 +86,6 @@ export default function TrashScreen() {
         const ids = Array.from(selectedIds);
         for (const id of ids) {
           try {
-            const MediaLibrary = require('expo-media-library');
             await MediaLibrary.deleteAssetsAsync([id]);
           } catch (e) {
             console.warn('Could not delete asset from disk:', id, e);
@@ -89,6 +93,7 @@ export default function TrashScreen() {
         }
         permanentlyDelete(ids);
         setSelectedIds(new Set());
+        await refreshMedia();
         setConfirmModal(prev => ({ ...prev, visible: false }));
       },
     });
@@ -103,14 +108,14 @@ export default function TrashScreen() {
       onConfirm: async () => {
         for (const item of items) {
           try {
-            const MediaLibrary = require('expo-media-library');
             await MediaLibrary.deleteAssetsAsync([item.id]);
-          } catch (e) {
+          } catch {
             console.warn('Could not delete from disk:', item.id);
           }
         }
         permanentlyDelete(items.map(i => i.id));
         setSelectedIds(new Set());
+        await refreshMedia();
         setConfirmModal(prev => ({ ...prev, visible: false }));
       },
     });

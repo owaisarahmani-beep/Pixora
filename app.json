@@ -8,11 +8,6 @@
     "userInterfaceStyle": "automatic",
     "scheme": "pixora",
     "backgroundColor": "#080A10",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#080A10"
-    },
     "plugins": [
       "expo-router",
       "expo-status-bar",
@@ -25,7 +20,17 @@
         }
       ],
       "expo-video",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#080A10"
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true

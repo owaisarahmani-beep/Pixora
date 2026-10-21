@@ -5,8 +5,7 @@ import {
   StyleSheet, 
   ScrollView, 
   Pressable, 
-  ActivityIndicator, 
-  Alert 
+  ActivityIndicator 
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
