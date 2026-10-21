@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "pixora",
-    "backgroundColor": "#080A10",
+    "backgroundColor": "#0C0916",
     "plugins": [
       "expo-router",
       "expo-status-bar",
@@ -26,9 +26,9 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash-icon.png",
-          "imageWidth": 200,
+          "imageWidth": 240,
           "resizeMode": "contain",
-          "backgroundColor": "#080A10"
+          "backgroundColor": "#0C0916"
         }
       ]
     ],
@@ -39,7 +39,7 @@
       "package": "com.pixora.gallery",
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundColor": "#080A10"
+        "backgroundColor": "#0C0916"
       }
     },
     "web": {
