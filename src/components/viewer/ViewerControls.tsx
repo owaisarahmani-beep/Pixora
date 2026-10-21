@@ -94,7 +94,6 @@ export default function ViewerControls({ item }: Props) {
   const openMoreMenu = () => {
     if (Platform.OS === 'ios') {
       const options = ['Cancel', 'Details'];
-      if (item.mediaType === 'photo') options.push('Edit');
       if (isPrivate) options.push('Remove from Vault'); else options.push('Make Private');
       if (isArchived) options.push('Unarchive'); else options.push('Archive');
       options.push('Delete');
@@ -104,7 +103,7 @@ export default function ViewerControls({ item }: Props) {
         (buttonIndex) => {
           if (buttonIndex === 0) return;
           const actionMap: Record<string, string> = {
-            'Details': 'details', 'Edit': 'edit',
+            'Details': 'details',
             'Make Private': 'private', 'Remove from Vault': 'unprivate',
             'Archive': 'archive', 'Unarchive': 'unarchive',
             'Delete': 'delete'
@@ -180,13 +179,6 @@ export default function ViewerControls({ item }: Props) {
                     <Ionicons name="information-circle-outline" size={24} color="#FFF" />
                     <Text style={styles.modalItemText}>Details</Text>
                   </Pressable>
-
-                  {item.mediaType === 'photo' && (
-                    <Pressable style={styles.modalItem} onPress={() => handleMoreAction('edit')}>
-                      <Ionicons name="color-wand-outline" size={24} color="#FFF" />
-                      <Text style={styles.modalItemText}>Edit</Text>
-                    </Pressable>
-                  )}
 
                   <Pressable style={styles.modalItem} onPress={() => handleMoreAction(isPrivate ? 'unprivate' : 'private')}>
                     <Ionicons name={isPrivate ? "lock-open-outline" : "lock-closed-outline"} size={24} color="#FFF" />

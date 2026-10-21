@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -6,7 +6,6 @@ import {
   Pressable, 
   ActivityIndicator, 
   Alert, 
-  Dimensions, 
   ScrollView,
   Image as RNImage
 } from 'react-native';
@@ -21,12 +20,17 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { useMediaStore } from '../../store/useMediaStore';
 import CropOverlay, { CropRect } from '../../components/editor/CropOverlay';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 type CropRatio = 'original' | '1:1' | '4:5' | '16:9' | '9:16' | '4:3' | '3:4';
-type ScaleOption = 'original' | '1080p' | '720p' | '50%';
-type QualityOption = 1.0 | 0.85 | 0.70;
-type FormatOption = ImageManipulator.SaveFormat.JPEG | ImageManipulator.SaveFormat.PNG | ImageManipulator.SaveFormat.WEBP;
+
+const RATIO_PRESETS: { id: CropRatio; label: string; ratio?: number }[] = [
+  { id: 'original', label: 'Free' },
+  { id: '1:1', label: '1:1', ratio: 1 },
+  { id: '4:5', label: '4:5', ratio: 4 / 5 },
+  { id: '16:9', label: '16:9', ratio: 16 / 9 },
+  { id: '9:16', label: '9:16', ratio: 9 / 16 },
+  { id: '4:3', label: '4:3', ratio: 4 / 3 },
+  { id: '3:4', label: '3:4', ratio: 3 / 4 },
+];
 
 export default function EditorScreen() {
   const theme = useTheme();
@@ -43,42 +47,39 @@ export default function EditorScreen() {
   const [originalDims, setOriginalDims] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [currentDims, setCurrentDims] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
 
-  // Edit Parameters
-  const [rotation, setRotation] = useState<number>(0);
-  const [flipX, setFlipX] = useState<boolean>(false);
-  const [flipY, setFlipY] = useState<boolean>(false);
-  const [cropRatio, setCropRatio] = useState<CropRatio>('original');
-  const [scaleOption, setScaleOption] = useState<ScaleOption>('original');
-  const [quality, setQuality] = useState<QualityOption>(1.0);
-  const [format, setFormat] = useState<FormatOption>(ImageManipulator.SaveFormat.JPEG);
-
-  // Custom Interactive Crop State
+  // Custom Interactive Crop State - starts at 0, 0, 1, 1 (full image corners)
   const [containerLayout, setContainerLayout] = useState<{ width: number; height: number } | null>(null);
+  const [cropRatio, setCropRatio] = useState<CropRatio>('original');
   const [activeCropRect, setActiveCropRect] = useState<CropRect>({
-    originX: 0.05,
-    originY: 0.05,
-    width: 0.9,
-    height: 0.9,
+    originX: 0,
+    originY: 0,
+    width: 1,
+    height: 1,
   });
-  const [hasAppliedCrop, setHasAppliedCrop] = useState<boolean>(false);
 
-  // Active Bottom Tab
-  const [activeTab, setActiveTab] = useState<'transform' | 'crop' | 'export'>('transform');
+  // Track if any modifications were applied
+  const [editCount, setEditCount] = useState<number>(0);
+
+  // Active Bottom Tab: 'crop' or 'transform'
+  const [activeTab, setActiveTab] = useState<'crop' | 'transform'>('crop');
 
   // Initialize media
   useEffect(() => {
     const item = media.find(m => m.id === id);
     if (item && item.mediaType === 'photo') {
-      setOriginalUri(item.uri);
-      setCurrentUri(item.uri);
+      queueMicrotask(() => {
+        setOriginalUri(item.uri);
+        setCurrentUri(item.uri);
+      });
       
       const w = item.width || 0;
       const h = item.height || 0;
       if (w > 0 && h > 0) {
-        setOriginalDims({ width: w, height: h });
-        setCurrentDims({ width: w, height: h });
+        queueMicrotask(() => {
+          setOriginalDims({ width: w, height: h });
+          setCurrentDims({ width: w, height: h });
+        });
       } else {
-        // Fallback size detection
         RNImage.getSize(item.uri, (width: number, height: number) => {
           setOriginalDims({ width, height });
           setCurrentDims({ width, height });
@@ -90,119 +91,7 @@ export default function EditorScreen() {
     }
   }, [id, media]);
 
-  // Apply all edit transformations
-  const applyEdits = useCallback(async (
-    newRot: number,
-    newFlipX: boolean,
-    newFlipY: boolean,
-    newCrop: CropRatio,
-    newScale: ScaleOption,
-    newQuality: QualityOption,
-    newFormat: FormatOption
-  ) => {
-    if (!originalUri) return;
-    setIsProcessing(true);
-
-    try {
-      const actions: ImageManipulator.Action[] = [];
-      const baseW = originalDims.width || 1000;
-      const baseH = originalDims.height || 1000;
-
-      // 1. Crop
-      if (newCrop !== 'original') {
-        let targetRatio = 1;
-        switch (newCrop) {
-          case '1:1': targetRatio = 1; break;
-          case '4:5': targetRatio = 4 / 5; break;
-          case '16:9': targetRatio = 16 / 9; break;
-          case '9:16': targetRatio = 9 / 16; break;
-          case '4:3': targetRatio = 4 / 3; break;
-          case '3:4': targetRatio = 3 / 4; break;
-        }
-
-        const currentRatio = baseW / baseH;
-        let cropW = baseW;
-        let cropH = baseH;
-        let originX = 0;
-        let originY = 0;
-
-        if (currentRatio > targetRatio) {
-          cropW = Math.round(baseH * targetRatio);
-          originX = Math.round((baseW - cropW) / 2);
-        } else {
-          cropH = Math.round(baseW / targetRatio);
-          originY = Math.round((baseH - cropH) / 2);
-        }
-
-        actions.push({
-          crop: { originX, originY, width: cropW, height: cropH }
-        });
-      }
-
-      // 2. Flip
-      if (newFlipX) actions.push({ flip: ImageManipulator.FlipType.Horizontal });
-      if (newFlipY) actions.push({ flip: ImageManipulator.FlipType.Vertical });
-
-      // 3. Rotation
-      if (newRot !== 0) actions.push({ rotate: newRot });
-
-      // 4. Resize / Scale
-      if (newScale !== 'original') {
-        if (newScale === '1080p') {
-          actions.push({ resize: { width: 1080 } });
-        } else if (newScale === '720p') {
-          actions.push({ resize: { width: 720 } });
-        } else if (newScale === '50%') {
-          const targetW = Math.round(baseW * 0.5);
-          actions.push({ resize: { width: targetW } });
-        }
-      }
-
-      if (actions.length > 0 || newQuality !== 1.0 || newFormat !== ImageManipulator.SaveFormat.JPEG) {
-        const result = await ImageManipulator.manipulateAsync(
-          originalUri,
-          actions,
-          { compress: newQuality, format: newFormat }
-        );
-        setCurrentUri(result.uri);
-        setCurrentDims({ width: result.width, height: result.height });
-      } else {
-        setCurrentUri(originalUri);
-        setCurrentDims(originalDims);
-      }
-    } catch (e) {
-      console.error('Image edit failed', e);
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [originalUri, originalDims]);
-
-  // Handlers for Transform
-  const handleRotateRight = () => {
-    const nextRot = (rotation + 90) % 360;
-    setRotation(nextRot);
-    applyEdits(nextRot, flipX, flipY, cropRatio, scaleOption, quality, format);
-  };
-
-  const handleRotateLeft = () => {
-    const nextRot = (rotation - 90 + 360) % 360;
-    setRotation(nextRot);
-    applyEdits(nextRot, flipX, flipY, cropRatio, scaleOption, quality, format);
-  };
-
-  const handleFlipHorizontal = () => {
-    const nextFlipX = !flipX;
-    setFlipX(nextFlipX);
-    applyEdits(rotation, nextFlipX, flipY, cropRatio, scaleOption, quality, format);
-  };
-
-  const handleFlipVertical = () => {
-    const nextFlipY = !flipY;
-    setFlipY(nextFlipY);
-    applyEdits(rotation, flipX, nextFlipY, cropRatio, scaleOption, quality, format);
-  };
-
-  // Calculate exact position of rendered image within container
+  // Calculate exact position and bounds of the rendered image inside container
   const imageLayout = useMemo(() => {
     if (!containerLayout || containerLayout.width === 0 || containerLayout.height === 0) return null;
     const baseW = currentDims.width || originalDims.width;
@@ -230,53 +119,53 @@ export default function EditorScreen() {
     return { width: w, height: h, x, y };
   }, [containerLayout, currentDims, originalDims]);
 
-  // Handlers for Crop
-  const handleSelectCrop = (crop: CropRatio) => {
-    setCropRatio(crop);
+  // Aspect ratio preset handler - fits the ratio cleanly to image edges
+  const handleSelectCropRatio = (preset: CropRatio) => {
+    setCropRatio(preset);
     const baseW = currentDims.width || originalDims.width || 1000;
     const baseH = currentDims.height || originalDims.height || 1000;
     const imageAspect = baseW / baseH;
 
-    if (crop === 'original') {
-      setActiveCropRect({ originX: 0.05, originY: 0.05, width: 0.9, height: 0.9 });
+    if (preset === 'original') {
+      // Full image - starts from the exact 4 outer corners
+      setActiveCropRect({ originX: 0, originY: 0, width: 1, height: 1 });
       return;
     }
 
-    let targetRatio = 1;
-    switch (crop) {
-      case '1:1': targetRatio = 1; break;
-      case '4:5': targetRatio = 4 / 5; break;
-      case '16:9': targetRatio = 16 / 9; break;
-      case '9:16': targetRatio = 9 / 16; break;
-      case '4:3': targetRatio = 4 / 3; break;
-      case '3:4': targetRatio = 3 / 4; break;
-    }
+    const found = RATIO_PRESETS.find(p => p.id === preset);
+    if (!found || !found.ratio) return;
+    const targetRatio = found.ratio;
 
-    const ratioFactor = targetRatio / imageAspect;
-    let w = 0.85;
-    let h = 0.85;
+    let w = 1.0;
+    let h = 1.0;
 
-    if (ratioFactor >= 1) {
-      w = 0.85;
-      h = Math.min(0.85, 0.85 / ratioFactor);
+    if (targetRatio > imageAspect) {
+      // Wider than image: width spans full image, height is centered
+      w = 1.0;
+      h = Math.min(1.0, imageAspect / targetRatio);
     } else {
-      h = 0.85;
-      w = Math.min(0.85, 0.85 * ratioFactor);
+      // Taller than image: height spans full image, width is centered
+      h = 1.0;
+      w = Math.min(1.0, targetRatio / imageAspect);
     }
 
-    const originX = (1 - w) / 2;
-    const originY = (1 - h) / 2;
+    const originX = Math.max(0, (1 - w) / 2);
+    const originY = Math.max(0, (1 - h) / 2);
 
     setActiveCropRect({ originX, originY, width: w, height: h });
   };
 
-  // Apply the custom interactive crop to the photo
-  const handleApplyCustomCrop = async () => {
-    if (!activeCropRect) return;
-    setIsProcessing(true);
+  // Apply the interactive crop to the active photo
+  const handleApplyCrop = async () => {
+    if (!currentUri || !activeCropRect) return;
+    
+    // If crop covers 100%, nothing to crop
+    if (activeCropRect.originX <= 0.005 && activeCropRect.originY <= 0.005 && activeCropRect.width >= 0.99 && activeCropRect.height >= 0.99) {
+      return;
+    }
 
+    setIsProcessing(true);
     try {
-      const sourceUri = currentUri || originalUri!;
       const baseW = currentDims.width || originalDims.width;
       const baseH = currentDims.height || originalDims.height;
 
@@ -287,73 +176,130 @@ export default function EditorScreen() {
 
       if (width > 20 && height > 20) {
         const result = await ImageManipulator.manipulateAsync(
-          sourceUri,
+          currentUri,
           [{ crop: { originX, originY, width, height } }],
-          { compress: quality, format }
+          { compress: 1.0, format: ImageManipulator.SaveFormat.JPEG }
         );
         setCurrentUri(result.uri);
         setCurrentDims({ width: result.width, height: result.height });
-        setHasAppliedCrop(true);
-        setActiveCropRect({ originX: 0.05, originY: 0.05, width: 0.9, height: 0.9 });
+        // Reset crop box to full corners of the new cropped image
+        setActiveCropRect({ originX: 0, originY: 0, width: 1, height: 1 });
+        setCropRatio('original');
+        setEditCount(prev => prev + 1);
       }
     } catch (e) {
-      console.error('Custom crop failed', e);
+      console.error('Crop failed', e);
+      Alert.alert('Error', 'Could not crop the photo.');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Handlers for Scale & Quality
-  const handleSelectScale = (scale: ScaleOption) => {
-    setScaleOption(scale);
-    applyEdits(rotation, flipX, flipY, cropRatio, scale, quality, format);
+  // Transform Handlers (Rotate 90°, Flip) - operates sequentially on current image
+  const handleTransform = async (action: ImageManipulator.Action) => {
+    if (!currentUri) return;
+    setIsProcessing(true);
+    try {
+      const result = await ImageManipulator.manipulateAsync(
+        currentUri,
+        [action],
+        { compress: 1.0, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      setCurrentUri(result.uri);
+      setCurrentDims({ width: result.width, height: result.height });
+      setActiveCropRect({ originX: 0, originY: 0, width: 1, height: 1 });
+      setEditCount(prev => prev + 1);
+    } catch (e) {
+      console.error('Transform failed', e);
+      Alert.alert('Error', 'Could not transform the photo.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleSelectQuality = (q: QualityOption) => {
-    setQuality(q);
-    applyEdits(rotation, flipX, flipY, cropRatio, scaleOption, q, format);
-  };
+  const handleRotateLeft = () => handleTransform({ rotate: -90 });
+  const handleRotateRight = () => handleTransform({ rotate: 90 });
+  const handleFlipHorizontal = () => handleTransform({ flip: ImageManipulator.FlipType.Horizontal });
+  const handleFlipVertical = () => handleTransform({ flip: ImageManipulator.FlipType.Vertical });
 
-  const handleSelectFormat = (fmt: FormatOption) => {
-    setFormat(fmt);
-    applyEdits(rotation, flipX, flipY, cropRatio, scaleOption, quality, fmt);
-  };
-
-  // Reset to original
+  // Reset all edits back to the initial photo
   const handleReset = () => {
-    setRotation(0);
-    setFlipX(false);
-    setFlipY(false);
-    setCropRatio('original');
-    setScaleOption('original');
-    setQuality(1.0);
-    setFormat(ImageManipulator.SaveFormat.JPEG);
-    setHasAppliedCrop(false);
-    setActiveCropRect({ originX: 0.05, originY: 0.05, width: 0.9, height: 0.9 });
     setCurrentUri(originalUri);
     setCurrentDims(originalDims);
+    setActiveCropRect({ originX: 0, originY: 0, width: 1, height: 1 });
+    setCropRatio('original');
+    setEditCount(0);
   };
 
-  // Save copy to device gallery
+  // Save copy to device gallery with verified permissions
   const handleSave = async () => {
-    if (!currentUri || currentUri === originalUri) {
+    if (!currentUri || (!editCount && isCropUnmodified(activeCropRect))) {
       router.back();
       return;
     }
     
     setIsProcessing(true);
     try {
-      await MediaLibrary.createAssetAsync(currentUri);
+      // 1. Request and verify write permission
+      const perm = await MediaLibrary.requestPermissionsAsync(true);
+      if (!perm.granted) {
+        Alert.alert('Permission Required', 'Pixora needs storage permission to save edited photos.');
+        setIsProcessing(false);
+        return;
+      }
+
+      let saveUri = currentUri;
+
+      // 2. If there is an active crop that hasn't been committed, crop it before saving
+      if (!isCropUnmodified(activeCropRect)) {
+        const baseW = currentDims.width || originalDims.width;
+        const baseH = currentDims.height || originalDims.height;
+        const originX = Math.max(0, Math.round(activeCropRect.originX * baseW));
+        const originY = Math.max(0, Math.round(activeCropRect.originY * baseH));
+        const width = Math.min(baseW - originX, Math.round(activeCropRect.width * baseW));
+        const height = Math.min(baseH - originY, Math.round(activeCropRect.height * baseH));
+
+        if (width > 20 && height > 20) {
+          const cropResult = await ImageManipulator.manipulateAsync(
+            saveUri,
+            [{ crop: { originX, originY, width, height } }],
+            { compress: 1.0, format: ImageManipulator.SaveFormat.JPEG }
+          );
+          saveUri = cropResult.uri;
+        }
+      }
+
+      // 3. Create asset in device media library
+      const asset = await MediaLibrary.createAssetAsync(saveUri);
+      
+      // Try to add to Pixora album for clean organization
+      try {
+        const album = await MediaLibrary.getAlbumAsync('Pixora');
+        if (!album) {
+          await MediaLibrary.createAlbumAsync('Pixora', asset, false);
+        } else {
+          await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+        }
+      } catch {
+        // Safe fallback if album creation is unsupported
+      }
+
       await refreshMedia();
-      Alert.alert('Success', 'Edited photo saved to Gallery!');
+      Alert.alert('Saved', 'Edited photo saved to Gallery!');
       router.back();
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to save edited photo', e);
-      Alert.alert('Error', 'Could not save the edited photo.');
+      Alert.alert('Save Error', e?.message || 'Could not save the photo to your device gallery.');
     } finally {
       setIsProcessing(false);
     }
   };
+
+  const isCropUnmodified = (rect: CropRect) => {
+    return rect.originX <= 0.005 && rect.originY <= 0.005 && rect.width >= 0.99 && rect.height >= 0.99;
+  };
+
+  const hasEdits = editCount > 0 || !isCropUnmodified(activeCropRect);
 
   if (!originalUri) {
     return (
@@ -363,14 +309,12 @@ export default function EditorScreen() {
     );
   }
 
-  const hasEdits = rotation !== 0 || flipX || flipY || hasAppliedCrop || scaleOption !== 'original' || quality !== 1.0;
-
   return (
     <View style={[styles.container, { backgroundColor: '#000', paddingTop: insets.top }]}>
       
       {/* Top Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.iconBtn}>
+        <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={12}>
           <Ionicons name="close" size={26} color="#FFF" />
         </Pressable>
 
@@ -379,7 +323,7 @@ export default function EditorScreen() {
           <Text style={styles.hudTitle}>Edit Photo</Text>
           {currentDims.width > 0 && (
             <Text style={styles.hudSubtitle}>
-              {currentDims.width} × {currentDims.height} • {format.toUpperCase()}
+              {currentDims.width} × {currentDims.height}
             </Text>
           )}
         </View>
@@ -388,6 +332,7 @@ export default function EditorScreen() {
           onPress={handleSave} 
           style={[styles.saveBtn, { opacity: isProcessing ? 0.5 : 1 }]} 
           disabled={isProcessing}
+          hitSlop={12}
         >
           <Text style={[styles.saveText, { color: theme.accent }]}>Save Copy</Text>
         </Pressable>
@@ -405,6 +350,7 @@ export default function EditorScreen() {
           transition={0}
         />
 
+        {/* Crop Overlay with full corner & edge handles */}
         {activeTab === 'crop' && (
           <CropOverlay
             imageLayout={imageLayout}
@@ -427,7 +373,7 @@ export default function EditorScreen() {
           </View>
         )}
 
-        {/* Quick Compare Button (floating above bottom controls) */}
+        {/* Hold to Compare Button */}
         {hasEdits && (
           <Pressable 
             style={styles.compareBtn}
@@ -445,49 +391,19 @@ export default function EditorScreen() {
         
         {/* Sub-panel Content based on Active Tab */}
         <View style={styles.tabContentArea}>
-          {activeTab === 'transform' && (
-            <View style={styles.toolsRow}>
-              <Pressable style={styles.toolBtn} onPress={handleRotateLeft}>
-                <Ionicons name="arrow-undo-outline" size={24} color="#FFF" />
-                <Text style={styles.toolText}>Rotate L</Text>
-              </Pressable>
-
-              <Pressable style={styles.toolBtn} onPress={handleRotateRight}>
-                <Ionicons name="arrow-redo-outline" size={24} color="#FFF" />
-                <Text style={styles.toolText}>Rotate R</Text>
-              </Pressable>
-              
-              <Pressable style={[styles.toolBtn, flipX && styles.toolBtnActive]} onPress={handleFlipHorizontal}>
-                <Ionicons name="swap-horizontal" size={24} color={flipX ? theme.accent : "#FFF"} />
-                <Text style={[styles.toolText, flipX && { color: theme.accent }]}>Flip H</Text>
-              </Pressable>
-              
-              <Pressable style={[styles.toolBtn, flipY && styles.toolBtnActive]} onPress={handleFlipVertical}>
-                <Ionicons name="swap-vertical" size={24} color={flipY ? theme.accent : "#FFF"} />
-                <Text style={[styles.toolText, flipY && { color: theme.accent }]}>Flip V</Text>
-              </Pressable>
-            </View>
-          )}
-
+          
+          {/* TAB 1: CROP & ASPECT */}
           {activeTab === 'crop' && (
             <View style={styles.cropTabContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
-                {[
-                  { id: 'original', label: 'Full / Free' },
-                  { id: '1:1', label: '1:1' },
-                  { id: '4:5', label: '4:5' },
-                  { id: '16:9', label: '16:9' },
-                  { id: '9:16', label: '9:16' },
-                  { id: '4:3', label: '4:3' },
-                  { id: '3:4', label: '3:4' },
-                ].map(item => (
+                {RATIO_PRESETS.map(item => (
                   <Pressable
                     key={item.id}
                     style={[
                       styles.chip,
                       cropRatio === item.id && { backgroundColor: theme.accent, borderColor: theme.accent }
                     ]}
-                    onPress={() => handleSelectCrop(item.id as CropRatio)}
+                    onPress={() => handleSelectCropRatio(item.id)}
                   >
                     <Text style={[
                       styles.chipText,
@@ -498,85 +414,48 @@ export default function EditorScreen() {
                   </Pressable>
                 ))}
               </ScrollView>
-              <Pressable
-                style={[styles.applyCropBtn, { backgroundColor: theme.accent }]}
-                onPress={handleApplyCustomCrop}
-                disabled={isProcessing}
-              >
-                <Ionicons name="checkmark" size={18} color="#000" />
-                <Text style={styles.applyCropText}>Apply</Text>
+
+              {!isCropUnmodified(activeCropRect) && (
+                <Pressable
+                  style={[styles.applyCropBtn, { backgroundColor: theme.accent }]}
+                  onPress={handleApplyCrop}
+                  disabled={isProcessing}
+                >
+                  <Ionicons name="checkmark" size={18} color="#000" />
+                  <Text style={styles.applyCropText}>Apply Crop</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
+          {/* TAB 2: TRANSFORM (ROTATE & FLIP) */}
+          {activeTab === 'transform' && (
+            <View style={styles.toolsRow}>
+              <Pressable style={styles.toolBtn} onPress={handleRotateLeft} disabled={isProcessing}>
+                <Ionicons name="arrow-undo-outline" size={24} color="#FFF" />
+                <Text style={styles.toolText}>Rotate L</Text>
+              </Pressable>
+
+              <Pressable style={styles.toolBtn} onPress={handleRotateRight} disabled={isProcessing}>
+                <Ionicons name="arrow-redo-outline" size={24} color="#FFF" />
+                <Text style={styles.toolText}>Rotate R</Text>
+              </Pressable>
+              
+              <Pressable style={styles.toolBtn} onPress={handleFlipHorizontal} disabled={isProcessing}>
+                <Ionicons name="swap-horizontal" size={24} color="#FFF" />
+                <Text style={styles.toolText}>Flip H</Text>
+              </Pressable>
+              
+              <Pressable style={styles.toolBtn} onPress={handleFlipVertical} disabled={isProcessing}>
+                <Ionicons name="swap-vertical" size={24} color="#FFF" />
+                <Text style={styles.toolText}>Flip V</Text>
               </Pressable>
             </View>
           )}
 
-          {activeTab === 'export' && (
-            <View style={styles.exportSection}>
-              {/* Scale / Resize */}
-              <View style={styles.optionRow}>
-                <Text style={styles.optionLabel}>Size:</Text>
-                <View style={styles.chipRow}>
-                  {(['original', '1080p', '720p', '50%'] as ScaleOption[]).map(s => (
-                    <Pressable
-                      key={s}
-                      style={[styles.smallChip, scaleOption === s && { backgroundColor: theme.accent }]}
-                      onPress={() => handleSelectScale(s)}
-                    >
-                      <Text style={[styles.smallChipText, scaleOption === s ? { color: '#000' } : { color: '#FFF' }]}>
-                        {s === 'original' ? 'Max' : s}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              {/* Quality */}
-              <View style={styles.optionRow}>
-                <Text style={styles.optionLabel}>Quality:</Text>
-                <View style={styles.chipRow}>
-                  {[
-                    { q: 1.0, label: '100%' },
-                    { q: 0.85, label: '85%' },
-                    { q: 0.70, label: '70%' },
-                  ].map(item => (
-                    <Pressable
-                      key={item.label}
-                      style={[styles.smallChip, quality === item.q && { backgroundColor: theme.accent }]}
-                      onPress={() => handleSelectQuality(item.q as QualityOption)}
-                    >
-                      <Text style={[styles.smallChipText, quality === item.q ? { color: '#000' } : { color: '#FFF' }]}>
-                        {item.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              {/* Format */}
-              <View style={styles.optionRow}>
-                <Text style={styles.optionLabel}>Format:</Text>
-                <View style={styles.chipRow}>
-                  {[
-                    { fmt: ImageManipulator.SaveFormat.JPEG, label: 'JPEG' },
-                    { fmt: ImageManipulator.SaveFormat.PNG, label: 'PNG' },
-                    { fmt: ImageManipulator.SaveFormat.WEBP, label: 'WEBP' },
-                  ].map(item => (
-                    <Pressable
-                      key={item.label}
-                      style={[styles.smallChip, format === item.fmt && { backgroundColor: theme.accent }]}
-                      onPress={() => handleSelectFormat(item.fmt)}
-                    >
-                      <Text style={[styles.smallChipText, format === item.fmt ? { color: '#000' } : { color: '#FFF' }]}>
-                        {item.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-            </View>
-          )}
         </View>
 
-        {/* Reset Edits Bar */}
+        {/* Reset Edits Button */}
         {hasEdits && (
           <Pressable style={styles.resetBtn} onPress={handleReset}>
             <Ionicons name="refresh-outline" size={14} color="#FFF" style={{ marginRight: 4 }} />
@@ -584,30 +463,22 @@ export default function EditorScreen() {
           </Pressable>
         )}
 
-        {/* Tab Navigator Bar */}
+        {/* Tab Navigator Bar (Crop vs Transform) */}
         <View style={styles.tabBar}>
-          <Pressable 
-            style={[styles.tabItem, activeTab === 'transform' && styles.tabItemActive]}
-            onPress={() => setActiveTab('transform')}
-          >
-            <Ionicons name="crop" size={20} color={activeTab === 'transform' ? theme.accent : '#8E8E93'} />
-            <Text style={[styles.tabText, activeTab === 'transform' && { color: theme.accent }]}>Transform</Text>
-          </Pressable>
-
           <Pressable 
             style={[styles.tabItem, activeTab === 'crop' && styles.tabItemActive]}
             onPress={() => setActiveTab('crop')}
           >
             <Ionicons name="scan-outline" size={20} color={activeTab === 'crop' ? theme.accent : '#8E8E93'} />
-            <Text style={[styles.tabText, activeTab === 'crop' && { color: theme.accent }]}>Aspect Crop</Text>
+            <Text style={[styles.tabText, activeTab === 'crop' && { color: theme.accent }]}>Crop & Aspect</Text>
           </Pressable>
 
           <Pressable 
-            style={[styles.tabItem, activeTab === 'export' && styles.tabItemActive]}
-            onPress={() => setActiveTab('export')}
+            style={[styles.tabItem, activeTab === 'transform' && styles.tabItemActive]}
+            onPress={() => setActiveTab('transform')}
           >
-            <Ionicons name="options-outline" size={20} color={activeTab === 'export' ? theme.accent : '#8E8E93'} />
-            <Text style={[styles.tabText, activeTab === 'export' && { color: theme.accent }]}>Size & Quality</Text>
+            <Ionicons name="sync-outline" size={20} color={activeTab === 'transform' ? theme.accent : '#8E8E93'} />
+            <Text style={[styles.tabText, activeTab === 'transform' && { color: theme.accent }]}>Rotate & Flip</Text>
           </Pressable>
         </View>
 
@@ -639,7 +510,7 @@ const styles = StyleSheet.create({
   },
   hudSubtitle: {
     color: '#8E8E93',
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 2,
   },
   iconBtn: {
@@ -648,43 +519,41 @@ const styles = StyleSheet.create({
   saveBtn: {
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#1E293B',
   },
   saveText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
   },
   imageContainer: {
     flex: 1,
+    position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0A0A0A',
-    position: 'relative',
   },
   image: {
-    width: SCREEN_WIDTH,
+    width: '100%',
     height: '100%',
   },
   originalBadge: {
     position: 'absolute',
     top: 16,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingVertical: 4,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#444',
+    borderColor: '#FFF',
   },
   originalBadgeText: {
-    color: '#38BDF8',
-    fontSize: 12,
-    fontWeight: '700',
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '800',
     letterSpacing: 1,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFill as any,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -694,155 +563,117 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(28, 28, 30, 0.85)',
+    backgroundColor: 'rgba(20,20,20,0.85)',
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    paddingHorizontal: 14,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#3A3A3C',
+    borderColor: '#444',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   compareBtnText: {
     color: '#FFF',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    marginLeft: 6,
   },
   controlsContainer: {
-    backgroundColor: '#141416',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 16,
+    backgroundColor: '#111',
     borderTopWidth: 1,
-    borderTopColor: '#262628',
+    borderTopColor: '#222',
   },
   tabContentArea: {
-    minHeight: 70,
+    minHeight: 64,
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   toolsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
+    paddingHorizontal: 16,
   },
   toolBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  toolBtnActive: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
   },
   toolText: {
     color: '#FFF',
     fontSize: 11,
-    marginTop: 6,
-    fontWeight: '500',
-  },
-  chipScroll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
+    marginTop: 4,
   },
   cropTabContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 12,
+  },
+  chipScroll: {
     paddingRight: 8,
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#444',
+    backgroundColor: '#222',
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   applyCropBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderRadius: 16,
     marginLeft: 8,
   },
   applyCropText: {
     color: '#000',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#333',
-    backgroundColor: '#202024',
-    marginRight: 10,
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  exportSection: {
-    paddingVertical: 4,
-  },
-  optionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  optionLabel: {
-    color: '#8E8E93',
-    fontSize: 13,
-    fontWeight: '600',
-    width: 65,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  smallChip: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: '#252528',
-    marginLeft: 6,
-  },
-  smallChipText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   resetBtn: {
     flexDirection: 'row',
-    alignSelf: 'center',
     alignItems: 'center',
+    alignSelf: 'center',
     paddingVertical: 4,
     paddingHorizontal: 12,
-    backgroundColor: '#2A2A2E',
-    borderRadius: 14,
-    marginVertical: 8,
+    marginBottom: 6,
   },
   resetText: {
-    color: '#FFF',
+    color: '#8E8E93',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   tabBar: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     borderTopWidth: 1,
     borderTopColor: '#222',
-    paddingTop: 10,
-    marginTop: 4,
+    paddingTop: 8,
   },
   tabItem: {
-    alignItems: 'center',
     flex: 1,
+    alignItems: 'center',
     paddingVertical: 4,
   },
-  tabItemActive: {},
+  tabItemActive: {
+    opacity: 1,
+  },
   tabText: {
     color: '#8E8E93',
     fontSize: 11,
-    marginTop: 4,
     fontWeight: '600',
+    marginTop: 2,
   },
 });
