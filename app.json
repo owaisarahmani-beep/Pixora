@@ -8,6 +8,11 @@
     "userInterfaceStyle": "automatic",
     "scheme": "pixora",
     "backgroundColor": "#0C0916",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0C0916"
+    },
     "plugins": [
       "expo-router",
       "expo-status-bar",
