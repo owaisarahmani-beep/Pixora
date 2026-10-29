@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { mediaStoreService } from '../services/media/MediaStoreService';
 import { PixoraMediaInfo, MediaGroup } from '../services/media/mediaTypes';
 import { groupMediaByDate } from '../utils/dateGrouping';
+import { useTrashStore, ensureTrashHydrated } from './useTrashStore';
 
 interface FavoritesState {
   favorites: Set<string>;
@@ -13,6 +14,7 @@ interface FavoritesState {
   isHydrated: boolean;
   
   toggleFavorite: (id: string, item?: PixoraMediaInfo) => void;
+  removeFavorite: (id: string) => void;
   loadFavorites: () => Promise<void>;
   setHydrated: (state: boolean) => void;
 }
@@ -60,6 +62,20 @@ export const useFavoritesStore = create<FavoritesState>()(
         }
       },
 
+      removeFavorite: (id: string) => {
+        const state = get();
+        if (state.favorites.has(id)) {
+          const newFavorites = new Set(state.favorites);
+          newFavorites.delete(id);
+          const newMedia = state.favoritesMedia.filter(m => m.id !== id);
+          set({
+            favorites: newFavorites,
+            favoritesMedia: newMedia,
+            groupedFavorites: groupMediaByDate(newMedia),
+          });
+        }
+      },
+
       loadFavorites: async () => {
         const { favorites } = get();
         const favoriteIds = Array.from(favorites);
@@ -72,13 +88,16 @@ export const useFavoritesStore = create<FavoritesState>()(
         set({ isLoading: true });
         
         try {
+          await ensureTrashHydrated();
           const assets = await mediaStoreService.getAssetsByIdsAsync(favoriteIds);
+          const trashedIds = new Set(useTrashStore.getState().items.map(i => String(i.id)));
+          const nonTrashed = assets.filter(a => !trashedIds.has(String(a.id)));
           // Prioritize by creationTime descending (newest first)
-          assets.sort((a, b) => b.creationTime - a.creationTime);
+          nonTrashed.sort((a, b) => b.creationTime - a.creationTime);
           
           set({ 
-            favoritesMedia: assets,
-            groupedFavorites: groupMediaByDate(assets),
+            favoritesMedia: nonTrashed,
+            groupedFavorites: groupMediaByDate(nonTrashed),
             isLoading: false
           });
         } catch (e) {

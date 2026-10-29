@@ -61,4 +61,28 @@ describe('groupMediaByDate', () => {
     const groups = groupMediaByDate(media);
     expect(groups[0].title).toBe('Today');
   });
+
+  it('correctly handles 10-digit Unix timestamps (seconds) as Today', () => {
+    // Android MediaStore DATE_ADDED is in seconds (~1.7 billion)
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    const media = [createMedia('1', nowInSeconds)];
+    
+    const groups = groupMediaByDate(media);
+    expect(groups.length).toBe(1);
+    expect(groups[0].title).toBe('Today');
+  });
+
+  it('deduplicates items with identical IDs to prevent duplicate keys in grid rendering', () => {
+    const today = Date.now();
+    const media = [
+      createMedia('1277', today),
+      createMedia('1278', today),
+      createMedia('1277', today), // Duplicate item from MediaStore cursor shift
+    ];
+
+    const groups = groupMediaByDate(media);
+    expect(groups.length).toBe(1);
+    expect(groups[0].data.length).toBe(2);
+    expect(groups[0].data.map(item => item.id)).toEqual(['1277', '1278']);
+  });
 });

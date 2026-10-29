@@ -28,4 +28,15 @@ describe('useViewerStore', () => {
     store.setDetailsVisible(true);
     expect(useViewerStore.getState().detailsVisible).toBe(true);
   });
+
+  it('updates seeking and controls visibility directly', () => {
+    const store = useViewerStore.getState();
+    expect(store.isSeeking).toBe(false);
+
+    store.setIsSeeking(true);
+    expect(useViewerStore.getState().isSeeking).toBe(true);
+
+    store.setControlsVisible(false);
+    expect(useViewerStore.getState().controlsVisible).toBe(false);
+  });
 });
