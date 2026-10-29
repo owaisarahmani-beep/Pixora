@@ -15,6 +15,7 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { PixoraMediaInfo } from '../../services/media/mediaTypes';
 import { useTheme } from '../../theme/ThemeProvider';
+import { normalizeTimestamp } from '../../utils/dateGrouping';
 
 interface Props {
   item: PixoraMediaInfo;
@@ -37,7 +38,7 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-const SHEET_HEIGHT = 380;
+const SHEET_HEIGHT = 320;
 
 export default function MediaDetailsModal({ item, detailsProgress, onClose }: Props) {
   const theme = useTheme();
@@ -127,14 +128,14 @@ export default function MediaDetailsModal({ item, detailsProgress, onClose }: Pr
           style={[
             styles.sheet, 
             { 
-              backgroundColor: theme.isDark ? '#141D2B' : '#FFFFFF',
+              backgroundColor: theme.surface,
               borderColor: theme.border,
             },
             sheetAnimatedStyle
           ]}
         >
           {/* Drag Handle */}
-          <View style={[styles.dragHandle, { backgroundColor: theme.isDark ? '#334155' : '#CBD5E1' }]} />
+          <View style={[styles.dragHandle, { backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.25)' : '#CBD5E1' }]} />
           
           <View style={[styles.headerRow, { borderBottomColor: theme.border }]}>
             <Text style={[styles.title, { color: theme.text }]}>Details</Text>
@@ -159,7 +160,7 @@ export default function MediaDetailsModal({ item, detailsProgress, onClose }: Pr
               <Text style={[styles.label, { color: theme.textMuted }]}>Date</Text>
             </View>
             <Text style={[styles.value, { color: theme.text }]}>
-              {format(new Date(item.creationTime), 'EEE, MMM d, yyyy • h:mm a')}
+              {format(new Date(normalizeTimestamp(item.creationTime || item.modificationTime)), 'EEE, MMM d, yyyy • h:mm a')}
             </Text>
           </View>
 
@@ -226,12 +227,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    height: SHEET_HEIGHT,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
     paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 32,
-    borderTopWidth: 1,
+    paddingTop: 8,
+    paddingBottom: 28,
+    borderTopWidth: 0,
     elevation: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },

@@ -136,14 +136,20 @@ export default function SearchScreen() {
           />
         ) : (
           <View style={styles.centerState}>
-            <Ionicons name="search-outline" size={64} color={theme.textMuted} />
-            <Text style={[styles.stateText, { color: theme.textMuted }]}>No results found.</Text>
+            <Ionicons name="search-outline" size={48} color={theme.textMuted} />
+            <Text style={[styles.stateTitle, { color: theme.text }]}>No results found</Text>
+            <Text style={[styles.stateText, { color: theme.textMuted }]}>
+              No photos match your current search or filters. Try searching by month, year, or clearing filters.
+            </Text>
           </View>
         )
       ) : (
         <View style={styles.centerState}>
-          <Ionicons name="images-outline" size={64} color={theme.textMuted} />
-          <Text style={[styles.stateText, { color: theme.textMuted }]}>Start searching your gallery.</Text>
+          <Ionicons name="images-outline" size={48} color={theme.textMuted} />
+          <Text style={[styles.stateTitle, { color: theme.text }]}>Search your photos</Text>
+          <Text style={[styles.stateText, { color: theme.textMuted }]}>
+            Search by filename, date, or select an album above to filter.
+          </Text>
         </View>
       )}
     </View>
@@ -156,19 +162,21 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 8,
+    paddingBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
+    letterSpacing: -0.3,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 10,
     borderRadius: 12,
     position: 'relative',
   },
@@ -179,11 +187,11 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    height: 48,
+    height: 42,
     borderRadius: 12,
-    paddingLeft: 40,
-    paddingRight: 40,
-    fontSize: 16,
+    paddingLeft: 38,
+    paddingRight: 38,
+    fontSize: 15,
   },
   clearButton: {
     position: 'absolute',
@@ -192,32 +200,42 @@ const styles = StyleSheet.create({
   filtersContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 10,
     gap: 8,
   },
   filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   filterText: {
+    fontSize: 12,
     fontWeight: '600',
   },
   centerState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  stateTitle: {
+    marginTop: 14,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   stateText: {
-    marginTop: 16,
-    fontSize: 16,
+    marginTop: 6,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   filterDivider: {
     width: 1,
-    height: 20,
-    backgroundColor: '#334155',
-    marginHorizontal: 8,
+    height: 18,
+    marginHorizontal: 6,
     alignSelf: 'center',
+    opacity: 0.3,
   },
   filterScroll: {
     paddingRight: 16,

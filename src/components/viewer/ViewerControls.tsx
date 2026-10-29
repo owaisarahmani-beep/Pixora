@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, TouchableWithoutFeedback, Alert, Platform, ActionSheetIOS } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Modal, TouchableWithoutFeedback, Platform, ActionSheetIOS } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
+import { format } from 'date-fns';
 import Animated, { 
   useAnimatedStyle, 
   withTiming, 
@@ -17,14 +18,17 @@ import { useViewerStore } from '../../store/useViewerStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useMediaStore } from '../../store/useMediaStore';
 import { usePrivacyStore } from '../../store/usePrivacyStore';
+import { normalizeTimestamp } from '../../utils/dateGrouping';
 import DeleteConfirmModal from '../common/DeleteConfirmModal';
+import { toastController } from '../common/Toast';
 
 interface Props {
   item: PixoraMediaInfo;
   detailsProgress?: SharedValue<number>;
+  onDeleteMedia?: (item: PixoraMediaInfo) => Promise<boolean>;
 }
 
-export default function ViewerControls({ item, detailsProgress }: Props) {
+export default function ViewerControls({ item, detailsProgress, onDeleteMedia }: Props) {
   const router = useRouter();
   const params = useLocalSearchParams();
   const source = Array.isArray(params.source) ? params.source[0] : (params.source as string) || 'gallery';
@@ -61,13 +65,20 @@ export default function ViewerControls({ item, detailsProgress }: Props) {
 
   const bottomBarAnimatedStyle = useAnimatedStyle(() => {
     if (!detailsProgress) return {};
+    const opacity = interpolate(
+      detailsProgress.value,
+      [0, 0.35],
+      [1, 0],
+      Extrapolation.CLAMP
+    );
     const translateY = interpolate(
       detailsProgress.value,
       [0, 1],
-      [0, -380],
+      [0, 40],
       Extrapolation.CLAMP
     );
     return {
+      opacity,
       transform: [{ translateY }],
     };
   });
@@ -86,7 +97,7 @@ export default function ViewerControls({ item, detailsProgress }: Props) {
     if (item.mediaType === 'photo') {
       router.push({ pathname: '/editor/[id]', params: { id: item.id, source } });
     } else {
-      Alert.alert('Video Editing', 'Editing tools are currently designed for photos.');
+      setDetailsVisible(true);
     }
   };
 
@@ -107,17 +118,21 @@ export default function ViewerControls({ item, detailsProgress }: Props) {
         break;
       case 'private':
         await privacyStore.makeAssetsPrivate([item.id]);
+        toastController.show({ message: 'Moved to Private Vault', type: 'success' });
         router.back();
         break;
       case 'unprivate':
         await privacyStore.removeAssetsFromPrivate([item.id]);
+        toastController.show({ message: 'Removed from Private Vault', type: 'success' });
         break;
       case 'archive':
         await privacyStore.archiveAssets([item.id]);
+        toastController.show({ message: 'Item archived', type: 'success' });
         router.back();
         break;
       case 'unarchive':
         await privacyStore.unarchiveAssets([item.id]);
+        toastController.show({ message: 'Item unarchived', type: 'success' });
         break;
       case 'delete':
         setShowDeleteModal(true);
@@ -154,50 +169,82 @@ export default function ViewerControls({ item, detailsProgress }: Props) {
   return (
     <>
       <Animated.View style={[styles.container, animatedStyle]} pointerEvents={controlsVisible ? 'box-none' : 'none'}>
-        {/* Top Bar: Back & More */}
+        {/* Top Bar: Back, Centered Date/Time, Info & More */}
         <Animated.View style={[styles.topBar, { paddingTop: insets.top || 20 }, topBarAnimatedStyle]}>
           <Pressable onPress={() => router.back()} style={styles.iconButton} accessibilityRole="button">
             <Ionicons name="arrow-back" size={24} color="#FFF" />
           </Pressable>
-          <Pressable onPress={openMoreMenu} style={styles.iconButton} accessibilityRole="button">
-            <Ionicons name="ellipsis-vertical" size={24} color="#FFF" />
-          </Pressable>
-        </Animated.View>
 
-        {/* Bottom Bar: 4 Primary Icon Actions (Favorite, Edit, Share, Delete) */}
-        <Animated.View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }, bottomBarAnimatedStyle]}>
-          <View style={styles.bottomBarInner}>
-            {/* 1. Favorite */}
-            <Pressable onPress={() => toggleFavorite(item.id, item)} style={styles.actionButton} hitSlop={12}>
-              <Ionicons
-                name={isFavorite ? 'heart' : 'heart-outline'}
-                size={26}
-                color={isFavorite ? '#EF4444' : '#FFF'}
-              />
-            </Pressable>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerDateText} numberOfLines={1}>
+              {format(new Date(normalizeTimestamp(item.creationTime || item.modificationTime)), 'MMMM d')}
+            </Text>
+            <Text style={styles.headerTimeText} numberOfLines={1}>
+              {format(new Date(normalizeTimestamp(item.creationTime || item.modificationTime)), 'h:mm a')}
+            </Text>
+          </View>
 
-            {/* 2. Edit */}
-            {item.mediaType === 'photo' ? (
-              <Pressable onPress={handleEdit} style={styles.actionButton} hitSlop={12}>
-                <Ionicons
-                  name="color-wand-outline"
-                  size={26}
-                  color="#FFF"
-                />
-              </Pressable>
-            ) : null}
-
-            {/* 3. Share */}
-            <Pressable onPress={handleShare} style={styles.actionButton} hitSlop={12}>
-              <Ionicons name="share-outline" size={26} color="#FFF" />
-            </Pressable>
-
-            {/* 4. Delete */}
-            <Pressable onPress={() => setShowDeleteModal(true)} style={styles.actionButton} hitSlop={12}>
-              <Ionicons name="trash-outline" size={26} color="#EF4444" />
+          <View style={styles.headerActions}>
+            <Pressable onPress={openMoreMenu} style={styles.iconButton} accessibilityRole="button">
+              <Ionicons name="ellipsis-vertical" size={22} color="#FFF" />
             </Pressable>
           </View>
         </Animated.View>
+
+        {/* Bottom Bar: 4 Primary Icon Actions (Share, Favorite, Edit, Delete) for photos */}
+        {item.mediaType === 'photo' && (
+          <Animated.View 
+            style={[
+              styles.bottomBarContainer, 
+              { paddingBottom: Math.max(insets.bottom, 10) + 8 }, 
+              bottomBarAnimatedStyle
+            ]}
+            pointerEvents="box-none"
+          >
+            <View style={styles.bottomBarCapsule}>
+              <View style={styles.bottomBarInner}>
+                {/* 1. Share */}
+                <Pressable onPress={handleShare} style={styles.actionButton} hitSlop={10} accessibilityRole="button">
+                  <Ionicons name="share-outline" size={24} color="#FFF" />
+                </Pressable>
+
+                {/* 2. Favorite */}
+                <Pressable 
+                  onPress={() => {
+                    toggleFavorite(item.id, item);
+                    toastController.show({ 
+                      message: !isFavorite ? 'Added to Favorites' : 'Removed from Favorites', 
+                      type: 'info' 
+                    });
+                  }} 
+                  style={styles.actionButton} 
+                  hitSlop={10} 
+                  accessibilityRole="button"
+                >
+                  <Ionicons
+                    name={isFavorite ? 'heart' : 'heart-outline'}
+                    size={24}
+                    color={isFavorite ? '#EF4444' : '#FFF'}
+                  />
+                </Pressable>
+
+                {/* 3. Edit */}
+                <Pressable onPress={handleEdit} style={styles.actionButton} hitSlop={10} accessibilityRole="button">
+                  <Ionicons
+                    name="color-wand-outline"
+                    size={24}
+                    color="#FFF"
+                  />
+                </Pressable>
+
+                {/* 4. Delete */}
+                <Pressable onPress={() => setShowDeleteModal(true)} style={styles.actionButton} hitSlop={10} accessibilityRole="button">
+                  <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                </Pressable>
+              </View>
+            </View>
+          </Animated.View>
+        )}
       </Animated.View>
 
       {/* Android Custom More Menu */}
@@ -244,9 +291,14 @@ export default function ViewerControls({ item, detailsProgress }: Props) {
         onCancel={() => setShowDeleteModal(false)}
         onConfirm={async () => {
           setShowDeleteModal(false);
-          const success = await deleteMediaAsync(item.id);
-          if (success) {
-            router.back();
+          if (onDeleteMedia) {
+            await onDeleteMedia(item);
+          } else {
+            const success = await deleteMediaAsync(item.id);
+            if (success) {
+              toastController.show({ message: 'Moved to Trash', type: 'success' });
+              router.back();
+            }
           }
         }}
       />
@@ -264,14 +316,52 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 16,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingBottom: 12,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  bottomBar: {
-    paddingHorizontal: 24,
-    paddingTop: 14,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+  headerTitleContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerDateText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  headerTimeText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bottomBarContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomBarCapsule: {
+    backgroundColor: 'rgba(28, 28, 30, 0.92)',
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 22,
+    paddingVertical: 8,
+    minWidth: 260,
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
   },
   bottomBarInner: {
     flexDirection: 'row',
@@ -285,8 +375,8 @@ const styles = StyleSheet.create({
   actionButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 10,
-    minWidth: 52,
+    padding: 8,
+    minWidth: 48,
   },
   modalOverlay: {
     flex: 1,

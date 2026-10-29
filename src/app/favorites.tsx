@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
+import * as Linking from 'expo-linking';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeProvider';
@@ -8,6 +9,7 @@ import { useMediaStore } from '../store/useMediaStore';
 import { useVisibleMedia } from '../hooks/useVisibleMedia';
 import { groupMediaByDate } from '../utils/dateGrouping';
 import PhotoGrid from '../components/gallery/PhotoGrid';
+import EmptyStateView from '../components/common/EmptyStateView';
 import { router } from 'expo-router';
 
 export default function FavoritesScreen() {
@@ -15,7 +17,9 @@ export default function FavoritesScreen() {
   const insets = useSafeAreaInsets();
   
   const { isLoading, favoritesMedia: canonicalFavorites, loadFavorites } = useFavoritesStore();
-  const { permissionStatus, requestPermissions } = useMediaStore();
+  const permissionStatus = useMediaStore((state) => state.permissionStatus);
+  const isCheckingPermission = useMediaStore((state) => state.isCheckingPermission);
+  const requestPermissions = useMediaStore((state) => state.requestPermissions);
 
   const favoritesMedia = useVisibleMedia(canonicalFavorites);
   const groupedFavorites = React.useMemo(() => groupMediaByDate(favoritesMedia), [favoritesMedia]);
@@ -26,13 +30,24 @@ export default function FavoritesScreen() {
     }
   }, [loadFavorites, permissionStatus]);
 
+  if (isCheckingPermission) {
+    return (
+      <View style={[styles.centerState, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="small" color={theme.accent} />
+      </View>
+    );
+  }
+
   if (permissionStatus === 'UNDETERMINED') {
     return (
       <View style={[styles.centerState, { backgroundColor: theme.background }]}>
-        <Text style={[styles.stateText, { color: theme.text, marginBottom: 16 }]}>Pixora needs access to your media.</Text>
-        <Pressable onPress={requestPermissions} style={{ padding: 12, backgroundColor: theme.surface, borderRadius: 8 }}>
-          <Text style={{ color: theme.accent, fontWeight: '600' }}>Grant Permission</Text>
-        </Pressable>
+        <EmptyStateView
+          icon="heart-outline"
+          title="Access Your Favorites"
+          description="Pixora requires access to your media library to view your favorite photos and videos."
+          actionLabel="Grant Permission"
+          onAction={requestPermissions}
+        />
       </View>
     );
   }
@@ -40,7 +55,13 @@ export default function FavoritesScreen() {
   if (permissionStatus === 'DENIED') {
     return (
       <View style={[styles.centerState, { backgroundColor: theme.background }]}>
-        <Text style={[styles.stateText, { color: theme.text }]}>Permission denied. Please enable access in system settings.</Text>
+        <EmptyStateView
+          icon="lock-closed-outline"
+          title="Permission Required"
+          description="Media access is denied. Please open system settings to enable access to your favorites."
+          actionLabel="Open Settings"
+          onAction={() => Linking.openSettings()}
+        />
       </View>
     );
   }

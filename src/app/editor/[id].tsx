@@ -7,6 +7,7 @@ import {
   ActivityIndicator, 
   Alert, 
   ScrollView,
+  Modal,
   Image as RNImage
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -14,13 +15,35 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibrary from 'expo-media-library/legacy';
 
 import { useTheme } from '../../theme/ThemeProvider';
 import { useMediaStore } from '../../store/useMediaStore';
 import CropOverlay, { CropRect } from '../../components/editor/CropOverlay';
 
 type CropRatio = 'original' | '1:1' | '4:5' | '16:9' | '9:16' | '4:3' | '3:4';
+
+export type FilterPreset = 'none' | 'vivid' | 'warm' | 'cool' | 'mono' | 'film' | 'dramatic' | 'sepia' | 'aurora';
+
+interface FilterItem {
+  id: FilterPreset;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  badgeColor: string;
+  overlayColor?: string;
+}
+
+const FILTER_PRESETS: FilterItem[] = [
+  { id: 'none', label: 'Original', icon: 'sparkles-outline', badgeColor: '#6B7280' },
+  { id: 'vivid', label: 'Vivid', icon: 'flame-outline', badgeColor: '#F97316', overlayColor: 'rgba(255, 120, 0, 0.12)' },
+  { id: 'warm', label: 'Warm', icon: 'sunny-outline', badgeColor: '#EAB308', overlayColor: 'rgba(255, 170, 40, 0.22)' },
+  { id: 'cool', label: 'Cool', icon: 'snow-outline', badgeColor: '#06B6D4', overlayColor: 'rgba(50, 160, 255, 0.20)' },
+  { id: 'mono', label: 'B&W', icon: 'contrast-outline', badgeColor: '#9CA3AF', overlayColor: 'rgba(20, 20, 20, 0.70)' },
+  { id: 'film', label: 'Film', icon: 'film-outline', badgeColor: '#D97706', overlayColor: 'rgba(240, 215, 175, 0.24)' },
+  { id: 'dramatic', label: 'Dramatic', icon: 'moon-outline', badgeColor: '#475569', overlayColor: 'rgba(0, 0, 0, 0.38)' },
+  { id: 'sepia', label: 'Sepia', icon: 'color-palette-outline', badgeColor: '#B45309', overlayColor: 'rgba(112, 66, 20, 0.35)' },
+  { id: 'aurora', label: 'Aurora', icon: 'prism-outline', badgeColor: '#8B5CF6', overlayColor: 'rgba(139, 92, 246, 0.24)' },
+];
 
 const RATIO_PRESETS: { id: CropRatio; label: string; ratio?: number }[] = [
   { id: 'original', label: 'Free' },
@@ -38,14 +61,22 @@ export default function EditorScreen() {
   const { id } = useLocalSearchParams();
   const { media, refreshMedia } = useMediaStore();
 
-  const [originalUri, setOriginalUri] = useState<string | null>(null);
-  const [currentUri, setCurrentUri] = useState<string | null>(null);
+  const item = media.find(m => m.id === id);
+
+  const originalUri = item?.uri || null;
+  const [currentUri, setCurrentUri] = useState<string | null>(item?.uri || null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
 
   // Dimensions
-  const [originalDims, setOriginalDims] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
-  const [currentDims, setCurrentDims] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const [originalDims, setOriginalDims] = useState<{ width: number; height: number }>({
+    width: item?.width || 0,
+    height: item?.height || 0,
+  });
+  const [currentDims, setCurrentDims] = useState<{ width: number; height: number }>({
+    width: item?.width || 0,
+    height: item?.height || 0,
+  });
 
   // Custom Interactive Crop State - starts at 0, 0, 1, 1 (full image corners)
   const [containerLayout, setContainerLayout] = useState<{ width: number; height: number } | null>(null);
@@ -57,39 +88,42 @@ export default function EditorScreen() {
     height: 1,
   });
 
+  // Filter state
+  const [selectedFilter, setSelectedFilter] = useState<FilterPreset>('none');
+
   // Track if any modifications were applied
   const [editCount, setEditCount] = useState<number>(0);
 
-  // Active Bottom Tab: 'crop' or 'transform'
-  const [activeTab, setActiveTab] = useState<'crop' | 'transform'>('crop');
+  // Active Bottom Tab: 'crop' | 'filter' | 'transform'
+  const [activeTab, setActiveTab] = useState<'crop' | 'filter' | 'transform'>('crop');
 
-  // Initialize media
+  // Save Choice Modal State
+  const [showSaveModal, setShowSaveModal] = useState(false);
+
+  // Validate media and measure dimensions if missing
   useEffect(() => {
-    const item = media.find(m => m.id === id);
-    if (item && item.mediaType === 'photo') {
-      queueMicrotask(() => {
-        setOriginalUri(item.uri);
-        setCurrentUri(item.uri);
-      });
-      
-      const w = item.width || 0;
-      const h = item.height || 0;
-      if (w > 0 && h > 0) {
-        queueMicrotask(() => {
-          setOriginalDims({ width: w, height: h });
-          setCurrentDims({ width: w, height: h });
-        });
-      } else {
-        RNImage.getSize(item.uri, (width: number, height: number) => {
-          setOriginalDims({ width, height });
-          setCurrentDims({ width, height });
-        }, () => {});
-      }
-    } else {
+    let isMounted = true;
+    if (!item || item.mediaType !== 'photo') {
       Alert.alert('Error', 'Unsupported media type for editing.');
       router.back();
+      return;
     }
-  }, [id, media]);
+
+    const w = item.width || 0;
+    const h = item.height || 0;
+    if (w === 0 || h === 0) {
+      RNImage.getSize(item.uri, (width: number, height: number) => {
+        if (isMounted) {
+          setOriginalDims({ width, height });
+          setCurrentDims({ width, height });
+        }
+      }, () => {});
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id, item]);
 
   // Calculate exact position and bounds of the rendered image inside container
   const imageLayout = useMemo(() => {
@@ -228,29 +262,41 @@ export default function EditorScreen() {
     setCurrentDims(originalDims);
     setActiveCropRect({ originX: 0, originY: 0, width: 1, height: 1 });
     setCropRatio('original');
+    setSelectedFilter('none');
     setEditCount(0);
   };
 
-  // Save copy to device gallery with verified permissions
-  const handleSave = async () => {
-    if (!currentUri || (!editCount && isCropUnmodified(activeCropRect))) {
+  const isCropUnmodified = (rect: CropRect) => {
+    return rect.originX <= 0.005 && rect.originY <= 0.005 && rect.width >= 0.99 && rect.height >= 0.99;
+  };
+
+  const hasEdits = editCount > 0 || !isCropUnmodified(activeCropRect) || selectedFilter !== 'none';
+
+  // Trigger Save Modal or navigate back if untouched
+  const handleSavePress = () => {
+    if (!hasEdits) {
       router.back();
       return;
     }
-    
+    setShowSaveModal(true);
+  };
+
+  // Perform either "Save as New Copy" or "Overwrite Original"
+  const performSave = async (mode: 'copy' | 'overwrite') => {
+    setShowSaveModal(false);
     setIsProcessing(true);
     try {
-      // 1. Request and verify write permission
-      const perm = await MediaLibrary.requestPermissionsAsync(true);
-      if (!perm.granted) {
-        Alert.alert('Permission Required', 'Pixora needs storage permission to save edited photos.');
-        setIsProcessing(false);
-        return;
-      }
+      // 1. Request and verify storage permissions
+      try {
+        await MediaLibrary.requestPermissionsAsync();
+      } catch {}
 
-      let saveUri = currentUri;
+      let saveUri = currentUri || originalUri;
+      if (!saveUri) return;
 
-      // 2. If there is an active crop that hasn't been committed, crop it before saving
+      const actions: ImageManipulator.Action[] = [];
+
+      // 2. If there is an active crop that hasn't been committed, apply it
       if (!isCropUnmodified(activeCropRect)) {
         const baseW = currentDims.width || originalDims.width;
         const baseH = currentDims.height || originalDims.height;
@@ -260,32 +306,49 @@ export default function EditorScreen() {
         const height = Math.min(baseH - originY, Math.round(activeCropRect.height * baseH));
 
         if (width > 20 && height > 20) {
-          const cropResult = await ImageManipulator.manipulateAsync(
-            saveUri,
-            [{ crop: { originX, originY, width, height } }],
-            { compress: 1.0, format: ImageManipulator.SaveFormat.JPEG }
-          );
-          saveUri = cropResult.uri;
+          actions.push({ crop: { originX, originY, width, height } });
         }
       }
 
-      // 3. Create asset in device media library
+      // 3. Always run ImageManipulator to guarantee a clean local file:/// URI (required by MediaLibrary)
+      const manipResult = await ImageManipulator.manipulateAsync(
+        saveUri,
+        actions,
+        { compress: 1.0, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      saveUri = manipResult.uri;
+
+      // 4. Save to device MediaLibrary
       const asset = await MediaLibrary.createAssetAsync(saveUri);
-      
-      // Try to add to Pixora album for clean organization
-      try {
-        const album = await MediaLibrary.getAlbumAsync('Pixora');
-        if (!album) {
-          await MediaLibrary.createAlbumAsync('Pixora', asset, false);
-        } else {
-          await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+
+      if (mode === 'overwrite') {
+        // Overwrite mode: attempt to remove old original asset from device
+        const originalId = Array.isArray(id) ? id[0] : id;
+        if (originalId) {
+          try {
+            await MediaLibrary.deleteAssetsAsync([originalId]);
+          } catch (delErr) {
+            console.warn('Original asset deletion failed or was declined', delErr);
+          }
         }
-      } catch {
-        // Safe fallback if album creation is unsupported
+        await refreshMedia();
+        Alert.alert('Saved', 'Original photo replaced with edited version!');
+      } else {
+        // Save as New Copy: add to Pixora album for clean organization
+        try {
+          const album = await MediaLibrary.getAlbumAsync('Pixora');
+          if (!album) {
+            await MediaLibrary.createAlbumAsync('Pixora', asset, false);
+          } else {
+            await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+          }
+        } catch {
+          // Safe fallback if album creation is unsupported
+        }
+        await refreshMedia();
+        Alert.alert('Saved', 'New edited photo saved to Gallery!');
       }
 
-      await refreshMedia();
-      Alert.alert('Saved', 'Edited photo saved to Gallery!');
       router.back();
     } catch (e: any) {
       console.error('Failed to save edited photo', e);
@@ -294,12 +357,6 @@ export default function EditorScreen() {
       setIsProcessing(false);
     }
   };
-
-  const isCropUnmodified = (rect: CropRect) => {
-    return rect.originX <= 0.005 && rect.originY <= 0.005 && rect.width >= 0.99 && rect.height >= 0.99;
-  };
-
-  const hasEdits = editCount > 0 || !isCropUnmodified(activeCropRect);
 
   if (!originalUri) {
     return (
@@ -310,7 +367,7 @@ export default function EditorScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: '#000', paddingTop: insets.top }]}>
+    <View style={[styles.container, { backgroundColor: '#000000', paddingTop: insets.top }]}>
       
       {/* Top Header */}
       <View style={styles.header}>
@@ -329,12 +386,12 @@ export default function EditorScreen() {
         </View>
 
         <Pressable 
-          onPress={handleSave} 
+          onPress={handleSavePress} 
           style={[styles.saveBtn, { opacity: isProcessing ? 0.5 : 1 }]} 
           disabled={isProcessing}
           hitSlop={12}
         >
-          <Text style={[styles.saveText, { color: theme.accent }]}>Save Copy</Text>
+          <Text style={[styles.saveText, { color: theme.accent }]}>Save</Text>
         </Pressable>
       </View>
 
@@ -349,6 +406,25 @@ export default function EditorScreen() {
           contentFit="contain"
           transition={0}
         />
+
+        {/* Real-time Filter Overlay */}
+        {!showOriginal && selectedFilter !== 'none' && (
+          <View
+            pointerEvents="none"
+            style={[
+              imageLayout ? {
+                position: 'absolute',
+                left: imageLayout.x,
+                top: imageLayout.y,
+                width: imageLayout.width,
+                height: imageLayout.height,
+              } : StyleSheet.absoluteFill,
+              {
+                backgroundColor: FILTER_PRESETS.find(f => f.id === selectedFilter)?.overlayColor || 'transparent',
+              }
+            ]}
+          />
+        )}
 
         {/* Crop Overlay with full corner & edge handles */}
         {activeTab === 'crop' && (
@@ -428,7 +504,36 @@ export default function EditorScreen() {
             </View>
           )}
 
-          {/* TAB 2: TRANSFORM (ROTATE & FLIP) */}
+          {/* TAB 2: FILTERS */}
+          {activeTab === 'filter' && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+              {FILTER_PRESETS.map((item) => {
+                const isSelected = selectedFilter === item.id;
+                return (
+                  <Pressable
+                    key={item.id}
+                    style={[
+                      styles.filterCard,
+                      isSelected && { borderColor: theme.accent, backgroundColor: 'rgba(139, 92, 246, 0.20)' }
+                    ]}
+                    onPress={() => setSelectedFilter(item.id)}
+                  >
+                    <View style={[styles.filterIconCircle, { backgroundColor: item.badgeColor }]}>
+                      <Ionicons name={item.icon} size={18} color="#FFFFFF" />
+                    </View>
+                    <Text style={[
+                      styles.filterLabel,
+                      isSelected ? { color: theme.accent, fontWeight: '700' } : { color: '#E2E8F0' }
+                    ]}>
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          {/* TAB 3: TRANSFORM (ROTATE & FLIP) */}
           {activeTab === 'transform' && (
             <View style={styles.toolsRow}>
               <Pressable style={styles.toolBtn} onPress={handleRotateLeft} disabled={isProcessing}>
@@ -463,14 +568,22 @@ export default function EditorScreen() {
           </Pressable>
         )}
 
-        {/* Tab Navigator Bar (Crop vs Transform) */}
+        {/* Tab Navigator Bar (Crop vs Filter vs Transform) */}
         <View style={styles.tabBar}>
           <Pressable 
             style={[styles.tabItem, activeTab === 'crop' && styles.tabItemActive]}
             onPress={() => setActiveTab('crop')}
           >
-            <Ionicons name="scan-outline" size={20} color={activeTab === 'crop' ? theme.accent : '#8E8E93'} />
+            <Ionicons name="crop-outline" size={20} color={activeTab === 'crop' ? theme.accent : '#8E8E93'} />
             <Text style={[styles.tabText, activeTab === 'crop' && { color: theme.accent }]}>Crop & Aspect</Text>
+          </Pressable>
+
+          <Pressable 
+            style={[styles.tabItem, activeTab === 'filter' && styles.tabItemActive]}
+            onPress={() => setActiveTab('filter')}
+          >
+            <Ionicons name="color-filter-outline" size={20} color={activeTab === 'filter' ? theme.accent : '#8E8E93'} />
+            <Text style={[styles.tabText, activeTab === 'filter' && { color: theme.accent }]}>Filters</Text>
           </Pressable>
 
           <Pressable 
@@ -483,6 +596,64 @@ export default function EditorScreen() {
         </View>
 
       </View>
+
+      {/* Save Choice Modal: Save as Copy vs Overwrite Original */}
+      <Modal
+        visible={showSaveModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSaveModal(false)}
+      >
+        <Pressable 
+          style={styles.modalOverlay}
+          onPress={() => setShowSaveModal(false)}
+        >
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Save Changes</Text>
+            <Text style={styles.modalSubtitle}>
+              Choose how you would like to save your edited photo.
+            </Text>
+
+            {/* Option 1: Save as New Copy */}
+            <Pressable
+              style={styles.saveOptionRow}
+              onPress={() => performSave('copy')}
+            >
+              <View style={[styles.saveOptionIconCircle, { backgroundColor: 'rgba(10, 132, 255, 0.15)' }]}>
+                <Ionicons name="copy-outline" size={22} color="#0A84FF" />
+              </View>
+              <View style={styles.saveOptionTextCol}>
+                <Text style={styles.saveOptionHeading}>Save as New Copy</Text>
+                <Text style={styles.saveOptionSub}>Keeps original photo and saves a copy</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#8E8E93" />
+            </Pressable>
+
+            {/* Option 2: Overwrite Original */}
+            <Pressable
+              style={styles.saveOptionRow}
+              onPress={() => performSave('overwrite')}
+            >
+              <View style={[styles.saveOptionIconCircle, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+                <Ionicons name="sync-outline" size={22} color="#F59E0B" />
+              </View>
+              <View style={styles.saveOptionTextCol}>
+                <Text style={styles.saveOptionHeading}>Overwrite Original</Text>
+                <Text style={styles.saveOptionSub}>Replaces original photo in Gallery</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#8E8E93" />
+            </Pressable>
+
+            {/* Cancel Button */}
+            <Pressable
+              style={styles.modalCancelBtn}
+              onPress={() => setShowSaveModal(false)}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -498,7 +669,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 56,
     borderBottomWidth: 1,
-    borderBottomColor: '#222',
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   hudContainer: {
     alignItems: 'center',
@@ -581,14 +752,42 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   controlsContainer: {
-    backgroundColor: '#111',
+    backgroundColor: '#1C1C1E',
     borderTopWidth: 1,
-    borderTopColor: '#222',
+    borderTopColor: 'rgba(255,255,255,0.08)',
   },
   tabContentArea: {
-    minHeight: 64,
+    minHeight: 74,
+    justifyContent: 'center',
+    paddingVertical: 6,
+  },
+  filterScroll: {
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    gap: 10,
+  },
+  filterCard: {
+    alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    minWidth: 64,
+  },
+  filterIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  filterLabel: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   toolsRow: {
     flexDirection: 'row',
@@ -622,8 +821,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#444',
-    backgroundColor: '#222',
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   chipText: {
     fontSize: 12,
@@ -659,7 +858,7 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#222',
+    borderTopColor: 'rgba(255,255,255,0.08)',
     paddingTop: 8,
   },
   tabItem: {
@@ -675,5 +874,82 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     marginTop: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#1C1C1E',
+    borderRadius: 24,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+  },
+  modalTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  modalSubtitle: {
+    color: '#8E8E93',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  saveOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2C2C2E',
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  saveOptionIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  saveOptionTextCol: {
+    flex: 1,
+  },
+  saveOptionHeading: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  saveOptionSub: {
+    color: '#8E8E93',
+    fontSize: 12,
+  },
+  modalCancelBtn: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  modalCancelText: {
+    color: '#8E8E93',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
