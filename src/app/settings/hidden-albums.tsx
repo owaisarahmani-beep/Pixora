@@ -82,9 +82,6 @@ export default function HiddenAlbumsScreen() {
                     <Text style={[styles.albumTitle, { color: theme.text }]} numberOfLines={1}>
                       {album.title}
                     </Text>
-                    <Text style={[styles.albumCount, { color: theme.textMuted }]}>
-                      {album.assetCount} items
-                    </Text>
                   </View>
                 </View>
 

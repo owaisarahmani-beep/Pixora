@@ -176,7 +176,6 @@ export default function HiddenMediaScreen() {
               </View>
               <View style={styles.albumTextWrapper}>
                 <Text style={[styles.albumTitle, { color: theme.text }]}>{item.title}</Text>
-                <Text style={[styles.albumCount, { color: theme.textMuted }]}>{item.assetCount} items</Text>
               </View>
               <Pressable 
                 style={[styles.unhideButton, { backgroundColor: theme.accent + '20' }]} 
@@ -318,11 +317,11 @@ const styles = StyleSheet.create({
   },
   albumTextWrapper: {
     flex: 1,
+    justifyContent: 'center',
   },
   albumTitle: {
     fontSize: 15,
     fontWeight: '600',
-    marginBottom: 2,
   },
   albumCount: {
     fontSize: 12,

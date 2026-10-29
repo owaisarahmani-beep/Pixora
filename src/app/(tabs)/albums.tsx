@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, SectionList, Alert, TextInput, Modal, TouchableWithoutFeedback } from 'react-native';
+import React, { useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, SectionList, TextInput, Modal, TouchableWithoutFeedback } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -13,15 +13,22 @@ import { useTrashStore } from '../../store/useTrashStore';
 import { useMemories } from '../../hooks/useMemories';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import MemoriesCarousel from '../../components/gallery/MemoriesCarousel';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
+import { toastController } from '../../components/common/Toast';
+import DeleteConfirmModal from '../../components/common/DeleteConfirmModal';
 
 export default function AlbumsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   
-  const { albums: canonicalAlbums, albumCovers, isLoadingAlbums, loadAlbums } = useAlbumsStore();
-  const { permissionStatus, media: allMedia } = useMediaStore();
+  const canonicalAlbums = useAlbumsStore((state) => state.albums);
+  const albumCovers = useAlbumsStore((state) => state.albumCovers);
+  const isLoadingAlbums = useAlbumsStore((state) => state.isLoadingAlbums);
+  const loadAlbums = useAlbumsStore((state) => state.loadAlbums);
+
+  const permissionStatus = useMediaStore((state) => state.permissionStatus);
+  const allMedia = useMediaStore((state) => state.media);
   
   // Run authorized filter for public context
   const publicMedia = useAuthorizedMedia(allMedia, 'public');
@@ -32,14 +39,15 @@ export default function AlbumsScreen() {
   // Favorites count
   const favoritesCount = useFavoritesStore(state => state.favorites.size);
   
-  // Smart albums derived from public media
-  const smartAlbums = useSmartAlbums(publicMedia);
+  // Trashed items and count
+  const trashedItems = useTrashStore(state => state.items);
+  const trashCount = trashedItems.length;
+
+  // Smart albums derived from public media, canonical device albums, covers, and reconciled trash
+  const smartAlbums = useSmartAlbums(publicMedia, canonicalAlbums, albumCovers, trashedItems);
   
   // Visible regular albums (filtered by hidden etc)
   const albums = useVisibleAlbums(canonicalAlbums);
-
-  // Trash count
-  const trashCount = useTrashStore(state => state.items.length);
   
   // Archive count
   const archivedIds = usePrivacyStore(state => state.archivedAssetIds);
@@ -47,8 +55,11 @@ export default function AlbumsScreen() {
   useEffect(() => {
     if (permissionStatus === 'GRANTED' || permissionStatus === 'LIMITED') {
       loadAlbums();
+      if (allMedia.length === 0) {
+        useMediaStore.getState().loadInitialMedia();
+      }
     }
-  }, [loadAlbums, permissionStatus]);
+  }, [loadAlbums, permissionStatus, allMedia.length]);
 
   const lockedAlbumIds = usePrivacyStore(state => state.lockedAlbumIds);
   const unlockAlbum = usePrivacyStore(state => state.unlockAlbum);
@@ -67,6 +78,19 @@ export default function AlbumsScreen() {
   const [renameVisible, setRenameVisible] = React.useState(false);
   const [renameTarget, setRenameTarget] = React.useState<{ id: string; title: string } | null>(null);
   const [renameText, setRenameText] = React.useState('');
+
+  // Delete album state
+  const [deleteAlbumTarget, setDeleteAlbumTarget] = React.useState<{ id: string; title: string } | null>(null);
+  const [deleteModalVisible, setDeleteModalVisible] = React.useState(false);
+
+  // Clear album selection on tab blur
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        useSelectionStore.getState().exitSelectionMode();
+      };
+    }, [])
+  );
   
   const handlePressAlbum = async (albumId: string) => {
     if (isSelectionMode) {
@@ -95,75 +119,85 @@ export default function AlbumsScreen() {
   };
 
   const renderSpecialRow = (item: { id: string; icon: string; label: string; sublabel: string; onPress: () => void; color?: string }) => (
-    <Pressable style={[styles.specialRow, { backgroundColor: theme.surface }]} onPress={item.onPress}>
-      <View style={[styles.specialIcon, { backgroundColor: (item.color || theme.accent) + '22' }]}>
-        <Ionicons name={item.icon as any} size={24} color={item.color || theme.accent} />
+    <Pressable style={styles.listRow} onPress={item.onPress}>
+      <View style={[styles.thumbnailWrap, { backgroundColor: (item.color || theme.accent) + '18' }]}>
+        <Ionicons name={item.icon as any} size={22} color={item.color || theme.accent} />
       </View>
-      <View style={styles.specialInfo}>
-        <Text style={[styles.specialLabel, { color: item.color || theme.text }]}>{item.label}</Text>
-        <Text style={[styles.specialSublabel, { color: theme.textMuted }]}>{item.sublabel}</Text>
+      <View style={styles.rowInfo}>
+        <Text style={[styles.rowLabel, { color: item.color || theme.text }]}>{item.label}</Text>
+        <Text style={[styles.rowSublabel, { color: theme.textMuted }]}>{item.sublabel}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+      <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
     </Pressable>
   );
 
-  const renderSmartAlbum = (item: { id: string; title: string; icon: string; count: number; items: any[] }) => {
-    const cover = item.items[0]?.uri;
+  const renderSmartAlbum = (item: { id: string; title: string; icon: string; count: number; items: any[]; coverUri?: string | null }) => {
+    const cover = item.coverUri || item.items[0]?.uri;
     return (
-      <Pressable style={[styles.albumCard, { backgroundColor: theme.surface }]} onPress={() => router.push({ pathname: '/smart-album/[id]', params: { id: item.id } })}>
-        <View style={[styles.albumIcon, { backgroundColor: theme.background }]}>
+      <Pressable style={styles.listRow} onPress={() => router.push({ pathname: '/smart-album/[id]', params: { id: item.id } })}>
+        <View style={[styles.thumbnailWrap, { backgroundColor: theme.card }]}>
           {cover ? (
-            <Image source={{ uri: cover }} style={styles.coverImage} contentFit="cover" />
+            <Image source={{ uri: cover }} style={styles.coverImage} contentFit="cover" transition={150} />
           ) : (
-            <Ionicons name={item.icon as any} size={28} color={theme.accent} />
+            <Ionicons name={item.icon as any} size={22} color={theme.accent} />
           )}
         </View>
-        <View style={styles.albumInfo}>
-          <Text style={[styles.albumTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
-          <Text style={[styles.albumCount, { color: theme.textMuted }]}>{item.count} items</Text>
+        <View style={styles.rowInfo}>
+          <Text style={[styles.rowLabel, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+        <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
       </Pressable>
     );
   };
 
-  const renderAlbum = ({ item }: { item: any }) => {
+  const renderAlbum = ({ item, index, total }: { item: any; index: number; total: number }) => {
     const isLocked = lockedAlbumIds.includes(item.id);
     const coverUri = isLocked ? null : albumCovers[item.id];
     const selected = isSelectionMode && isSelected(item.id);
+    const isFirst = index === 0;
+    const isLast = index === total - 1;
     
     return (
-      <Pressable
+      <View
         style={[
-          styles.albumCard,
+          styles.albumRowWrapper,
           { backgroundColor: selected ? theme.accent + '22' : theme.surface },
-          selected && { borderWidth: 2, borderColor: theme.accent },
+          isFirst && styles.roundedTop,
+          isLast && styles.roundedBottom,
+          selected && { borderWidth: 1.5, borderColor: theme.accent },
         ]}
-        onPress={() => handlePressAlbum(item.id)}
-        onLongPress={() => handleLongPressAlbum(item.id)}
-        delayLongPress={300}
       >
-        <View style={[styles.albumIcon, { backgroundColor: theme.background }]}>
-          {coverUri ? (
-            <Image source={{ uri: coverUri }} style={styles.coverImage} contentFit="cover" transition={200} />
+        <Pressable
+          style={styles.listRow}
+          onPress={() => handlePressAlbum(item.id)}
+          onLongPress={() => handleLongPressAlbum(item.id)}
+          delayLongPress={500}
+        >
+          <View style={[styles.thumbnailWrap, { backgroundColor: theme.card }]}>
+            {coverUri ? (
+              <Image source={{ uri: coverUri }} style={styles.coverImage} contentFit="cover" transition={200} />
+            ) : (
+              <Ionicons name={isLocked ? 'lock-closed' : 'folder'} size={22} color={isLocked ? '#F59E0B' : theme.accent} />
+            )}
+          </View>
+          <View style={styles.rowInfo}>
+            <Text style={[styles.rowLabel, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
+            {isLocked && (
+              <Text style={[styles.rowSublabel, { color: theme.textMuted }]}>
+                Locked Album
+              </Text>
+            )}
+          </View>
+          {selected ? (
+            <Ionicons name="checkmark-circle" size={22} color={theme.accent} />
           ) : (
-            <Ionicons name={isLocked ? 'lock-closed' : 'folder'} size={28} color={theme.accent} />
+            <Pressable onPress={() => setAlbumMenuTarget(item)} style={styles.moreBtn} hitSlop={10}>
+              <Ionicons name="ellipsis-vertical" size={16} color={theme.textMuted} />
+            </Pressable>
           )}
-        </View>
-        <View style={styles.albumInfo}>
-          <Text style={[styles.albumTitle, { color: theme.text }]} numberOfLines={1}>{item.title}</Text>
-          <Text style={[styles.albumCount, { color: theme.textMuted }]}>
-            {isLocked ? 'Locked Album' : `${item.assetCount} items`}
-          </Text>
-        </View>
-        {selected ? (
-          <Ionicons name="checkmark-circle" size={24} color={theme.accent} />
-        ) : (
-          <Pressable onPress={() => setAlbumMenuTarget(item)} style={styles.moreBtn} hitSlop={8}>
-            <Ionicons name="ellipsis-vertical" size={18} color={theme.textMuted} />
-          </Pressable>
-        )}
-      </Pressable>
+        </Pressable>
+        {!isLast && <View style={[styles.inlineDivider, { backgroundColor: theme.border }]} />}
+      </View>
     );
   };
 
@@ -178,7 +212,7 @@ export default function AlbumsScreen() {
     },
     {
       title: 'My Albums',
-      data: albums,
+      data: albums.length > 0 ? albums : ['empty_my_albums' as const],
     },
   ];
 
@@ -190,36 +224,57 @@ export default function AlbumsScreen() {
 
       <SectionList<any, any>
         sections={sections}
+        refreshing={isLoadingAlbums}
+        onRefresh={() => {
+          loadAlbums(true);
+          useMediaStore.getState().refreshMedia();
+        }}
         ListHeaderComponent={
           memories.length > 0 ? <MemoriesCarousel memories={memories} /> : null
         }
         keyExtractor={(item, index) => (typeof item === 'string' ? item : (item as any).id ?? String(index))}
-        contentContainerStyle={{ paddingBottom: 120 }}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 84 }}
         renderSectionHeader={({ section }) => (
           <Text style={[styles.sectionHeader, { color: theme.textMuted, backgroundColor: theme.background }]}>
             {section.title}
           </Text>
         )}
-        renderItem={({ item, section }) => {
+        renderItem={({ item, index, section }) => {
           if (section.title === 'Library') {
             return (
-              <View>
+              <View style={[styles.groupedCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 {renderSpecialRow({ id: 'favorites', icon: 'heart', label: 'Favorites', sublabel: `${favoritesCount} items`, onPress: () => router.push('/favorites'), color: '#EF4444' })}
-                {renderSpecialRow({ id: 'archive', icon: 'archive', label: 'Archive', sublabel: `${archivedIds.length} items`, onPress: () => router.push('/archive') })}
-                {renderSpecialRow({ id: 'trash', icon: 'trash', label: 'Recently Deleted', sublabel: trashCount > 0 ? `${trashCount} items` : 'Empty', onPress: () => router.push('/trash'), color: '#EF4444' })}
+                <View style={[styles.inlineDivider, { backgroundColor: theme.border }]} />
+                {renderSpecialRow({ id: 'archive', icon: 'archive', label: 'Archive', sublabel: `${archivedIds.length} items`, onPress: () => router.push('/archive'), color: theme.accent })}
+                <View style={[styles.inlineDivider, { backgroundColor: theme.border }]} />
+                {renderSpecialRow({ id: 'trash', icon: 'trash', label: 'Recently Deleted', sublabel: trashCount > 0 ? `${trashCount} items` : 'Empty', onPress: () => router.push('/trash'), color: '#F43F5E' })}
               </View>
             );
           }
           if (section.title === 'Smart Albums') {
             return (
-              <View>
-                {smartAlbums.map(sa => (
-                  <View key={sa.id}>{renderSmartAlbum(sa)}</View>
+              <View style={[styles.groupedCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                {smartAlbums.map((sa, i) => (
+                  <React.Fragment key={sa.id}>
+                    {i > 0 && <View style={[styles.inlineDivider, { backgroundColor: theme.border }]} />}
+                    {renderSmartAlbum(sa)}
+                  </React.Fragment>
                 ))}
               </View>
             );
           }
-          return renderAlbum({ item });
+          if (item === 'empty_my_albums') {
+            return (
+              <View style={[styles.emptyGroupedCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Ionicons name="folder-open-outline" size={28} color={theme.textMuted} />
+                <Text style={[styles.emptyTitle, { color: theme.text }]}>No Custom Albums</Text>
+                <Text style={[styles.emptySubtitle, { color: theme.textMuted }]}>
+                  Albums from your camera and device will appear here
+                </Text>
+              </View>
+            );
+          }
+          return renderAlbum({ item, index, total: section.data.length });
         }}
         ListEmptyComponent={
           isLoadingAlbums ? (
@@ -252,6 +307,7 @@ export default function AlbumsScreen() {
                       const success = await unlockAlbum(target.id);
                       if (success) {
                         await unlockAlbumContent(target.id);
+                        toastController.show({ message: `"${target.title}" unlocked`, type: 'success' });
                       }
                     }}
                   >
@@ -272,6 +328,7 @@ export default function AlbumsScreen() {
                       const target = albumMenuTarget;
                       setAlbumMenuTarget(null);
                       await lockAlbumContent(target.id);
+                      toastController.show({ message: `"${target.title}" locked with biometric protection`, type: 'success' });
                     }}
                   >
                     <View style={[styles.menuIconWrap, { backgroundColor: theme.accent + '1A' }]}>
@@ -303,6 +360,25 @@ export default function AlbumsScreen() {
                     <Text style={[styles.menuRowLabel, { color: theme.text }]}>Rename Album</Text>
                   </View>
                 </Pressable>
+
+                <View style={[styles.menuDivider, { backgroundColor: theme.border }]} />
+
+                <Pressable
+                  style={styles.menuRow}
+                  onPress={() => {
+                    const target = albumMenuTarget;
+                    setAlbumMenuTarget(null);
+                    setDeleteAlbumTarget({ id: target.id, title: target.title });
+                    setDeleteModalVisible(true);
+                  }}
+                >
+                  <View style={[styles.menuIconWrap, { backgroundColor: '#EF44441A' }]}>
+                    <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                  </View>
+                  <View style={styles.menuRowInfo}>
+                    <Text style={[styles.menuRowLabel, { color: '#EF4444' }]}>Delete Album</Text>
+                  </View>
+                </Pressable>
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -328,9 +404,11 @@ export default function AlbumsScreen() {
                 <Text style={{ color: theme.textMuted, fontSize: 16 }}>Cancel</Text>
               </Pressable>
               <Pressable style={styles.modalBtn} onPress={() => {
-                // expo-media-library doesn't directly support renaming albums.
-                // This is a display-only rename until native API support is added.
-                Alert.alert('Rename', `Album will appear as "${renameText}" (requires app restart to sync with OS)`);
+                const trimmed = renameText.trim();
+                if (trimmed && renameTarget) {
+                  useAlbumsStore.getState().renameAlbum(renameTarget.id, trimmed);
+                  toastController.show({ message: `Album renamed to "${trimmed}"`, type: 'success' });
+                }
                 setRenameVisible(false);
               }}>
                 <Text style={{ color: theme.accent, fontSize: 16, fontWeight: '600' }}>Rename</Text>
@@ -339,65 +417,103 @@ export default function AlbumsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Delete Album Modal */}
+      <DeleteConfirmModal
+        visible={deleteModalVisible}
+        title="Delete Album?"
+        message={`Are you sure you want to delete "${deleteAlbumTarget?.title || 'this album'}"? Photos inside will not be deleted from your device.`}
+        confirmText="Delete"
+        isDestructive={true}
+        onCancel={() => {
+          setDeleteModalVisible(false);
+          setDeleteAlbumTarget(null);
+        }}
+        onConfirm={() => {
+          if (deleteAlbumTarget) {
+            useAlbumsStore.getState().deleteAlbum(deleteAlbumTarget.id);
+            toastController.show({ message: `Album "${deleteAlbumTarget.title}" deleted`, type: 'success' });
+          }
+          setDeleteModalVisible(false);
+          setDeleteAlbumTarget(null);
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingVertical: 12 },
-  headerTitle: { fontSize: 28, fontWeight: 'bold' },
+  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 },
+  headerTitle: { fontSize: 24, fontWeight: '700', letterSpacing: -0.3 },
   sectionHeader: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 8,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
-  specialRow: {
+  groupedCard: {
+    marginHorizontal: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  albumRowWrapper: {
+    marginHorizontal: 16,
+    overflow: 'hidden',
+  },
+  roundedTop: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  roundedBottom: {
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+  },
+  listRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginHorizontal: 12,
-    marginVertical: 3,
-    borderRadius: 12,
+    paddingVertical: 11,
   },
-  specialIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  specialInfo: { flex: 1 },
-  specialLabel: { fontSize: 16, fontWeight: '500' },
-  specialSublabel: { fontSize: 12, marginTop: 2 },
-  albumCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginHorizontal: 12,
-    marginVertical: 3,
-    borderRadius: 12,
-  },
-  albumIcon: {
-    width: 52,
-    height: 52,
+  thumbnailWrap: {
+    width: 46,
+    height: 46,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    marginRight: 12,
+    marginRight: 14,
   },
   coverImage: { width: '100%', height: '100%' },
-  albumInfo: { flex: 1 },
-  albumTitle: { fontSize: 15, fontWeight: '500' },
-  albumCount: { fontSize: 12, marginTop: 2 },
-  moreBtn: { padding: 8 },
+  rowInfo: { flex: 1, justifyContent: 'center' },
+  rowLabel: { fontSize: 15, fontWeight: '500' },
+  rowSublabel: { fontSize: 13, marginTop: 2 },
+  inlineDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 76,
+  },
+  moreBtn: { padding: 6 },
+  emptyGroupedCard: {
+    marginHorizontal: 16,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

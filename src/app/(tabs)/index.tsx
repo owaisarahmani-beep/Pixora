@@ -1,13 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, AppState, AppStateStatus, Button, ActivityIndicator, Pressable } from 'react-native';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native';
 import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useMediaStore } from '../../store/useMediaStore';
 import PhotoGrid from '../../components/gallery/PhotoGrid';
+import EmptyStateView from '../../components/common/EmptyStateView';
 import { useVisibleMedia } from '../../hooks/useVisibleMedia';
-import { groupMediaByDate } from '../../utils/dateGrouping';
-import { router } from 'expo-router';
+import { groupMediaByDate, getMediaEffectiveTimestamp } from '../../utils/dateGrouping';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PhotosScreen() {
@@ -15,20 +16,20 @@ export default function PhotosScreen() {
   const insets = useSafeAreaInsets();
   
   // 1. All hooks must be at the top!
-  const { 
-    permissionStatus, 
-    media: canonicalMedia, 
-    isLoading, 
-    isRefreshing, 
-    checkPermissions, 
-    requestPermissions, 
-    loadMoreMedia, 
-    refreshMedia 
-  } = useMediaStore();
+  const permissionStatus = useMediaStore((state) => state.permissionStatus);
+  const isCheckingPermission = useMediaStore((state) => state.isCheckingPermission);
+  const canonicalMedia = useMediaStore((state) => state.media);
+  const sortOrder = useMediaStore((state) => state.sortOrder);
+  const setSortOrder = useMediaStore((state) => state.setSortOrder);
+  const isLoading = useMediaStore((state) => state.isLoading);
+  const isRefreshing = useMediaStore((state) => state.isRefreshing);
+  const checkPermissions = useMediaStore((state) => state.checkPermissions);
+  const requestPermissions = useMediaStore((state) => state.requestPermissions);
+  const loadMoreMedia = useMediaStore((state) => state.loadMoreMedia);
+  const refreshMedia = useMediaStore((state) => state.refreshMedia);
 
   const visibleMedia = useVisibleMedia(canonicalMedia);
   
-  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [filterType, setFilterType] = useState<'all' | 'photo' | 'video'>('all');
 
   const filteredGrouped = useMemo(() => {
@@ -36,32 +37,50 @@ export default function PhotosScreen() {
     if (filterType !== 'all') {
       media = media.filter(m => m.mediaType === filterType);
     }
-    if (sortOrder === 'oldest') {
-      media = [...media].sort((a, b) => a.creationTime - b.creationTime);
-    }
-    return groupMediaByDate(media);
+    const sorted = [...media].sort((a, b) => {
+      const timeA = getMediaEffectiveTimestamp(a);
+      const timeB = getMediaEffectiveTimestamp(b);
+      return sortOrder === 'newest' ? timeB - timeA : timeA - timeB;
+    });
+    return groupMediaByDate(sorted);
   }, [visibleMedia, sortOrder, filterType]);
 
   useEffect(() => {
     checkPermissions();
-    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'active') {
-        checkPermissions();
-        const currentStatus = useMediaStore.getState().permissionStatus;
-        if (currentStatus === 'GRANTED' || currentStatus === 'LIMITED') {
-          useMediaStore.getState().refreshMedia();
-        }
-      }
-    });
-    return () => subscription.remove();
   }, [checkPermissions]);
 
+  useFocusEffect(
+    useCallback(() => {
+      const state = useMediaStore.getState();
+      const status = state.permissionStatus;
+      if (status === 'GRANTED' || status === 'LIMITED') {
+        // Throttled refresh: skip full query if recently loaded within 20s
+        if (state.media.length === 0 || Date.now() - state.lastRefreshTime > 20000) {
+          refreshMedia();
+        }
+      }
+    }, [refreshMedia])
+  );
+
   // 2. Early Returns (only AFTER all hooks are called)
+  if (isCheckingPermission) {
+    return (
+      <View style={[styles.center, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="small" color={theme.accent} />
+      </View>
+    );
+  }
+
   if (permissionStatus === 'UNDETERMINED') {
     return (
       <View style={[styles.center, { backgroundColor: theme.background }]}>
-        <Text style={[styles.text, { color: theme.text }]}>Pixora needs access to your media.</Text>
-        <Button title="Grant Permission" onPress={requestPermissions} color={theme.accent} />
+        <EmptyStateView
+          icon="images-outline"
+          title="Access Your Gallery"
+          description="Pixora requires access to your photos and videos to organize, browse, and edit your device media."
+          actionLabel="Grant Permission"
+          onAction={requestPermissions}
+        />
       </View>
     );
   }
@@ -69,8 +88,13 @@ export default function PhotosScreen() {
   if (permissionStatus === 'DENIED') {
     return (
       <View style={[styles.center, { backgroundColor: theme.background }]}>
-        <Text style={[styles.text, { color: theme.text }]}>Permission denied. Please enable access in system settings.</Text>
-        <Button title="Open Settings" onPress={() => Linking.openSettings()} color={theme.accent} />
+        <EmptyStateView
+          icon="lock-closed-outline"
+          title="Permission Required"
+          description="Media access is denied. Please open system settings to grant Pixora permission to view your photos and videos."
+          actionLabel="Open Settings"
+          onAction={() => Linking.openSettings()}
+        />
       </View>
     );
   }
@@ -86,7 +110,11 @@ export default function PhotosScreen() {
   if (visibleMedia.length === 0) {
     return (
       <View style={[styles.center, { backgroundColor: theme.background }]}>
-        <Text style={[styles.text, { color: theme.textMuted }]}>No photos or videos found.</Text>
+        <EmptyStateView
+          icon="images-outline"
+          title="No Media Found"
+          description="Photos and videos stored on your device will appear here."
+        />
       </View>
     );
   }
@@ -95,32 +123,38 @@ export default function PhotosScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {permissionStatus === 'LIMITED' && (
-        <View style={[styles.limitedBanner, { backgroundColor: theme.surface }]}>
-          <Text style={[styles.limitedText, { color: theme.text }]}>
-            Showing limited photos. Tap to manage access.
-          </Text>
-          <Button title="Manage" onPress={requestPermissions} color={theme.accent} />
+        <View style={[styles.limitedBanner, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={styles.limitedLeft}>
+            <Ionicons name="information-circle-outline" size={18} color={theme.accent} style={{ marginRight: 8 }} />
+            <Text style={[styles.limitedText, { color: theme.text }]}>
+              Showing limited photos. Tap to manage access.
+            </Text>
+          </View>
+          <Pressable 
+            style={[styles.manageBtn, { backgroundColor: theme.accent }]}
+            onPress={requestPermissions}
+            hitSlop={6}
+          >
+            <Text style={styles.manageBtnText}>Manage</Text>
+          </Pressable>
         </View>
       )}
       
-      {/* Top Floating Search Capsule (Google Photos style) */}
-      <View style={[styles.headerContainer, { paddingTop: insets.top + 8 }]}>
+      {/* Top Floating Search Capsule */}
+      <View style={[styles.headerContainer, { paddingTop: insets.top + 6 }]}>
         <Pressable 
           style={[
             styles.searchBar, 
             { 
               backgroundColor: theme.surface, 
               borderColor: theme.border,
-              shadowOpacity: theme.isDark ? 0.2 : 0.06,
             }
           ]} 
           onPress={() => router.push('/search')}
         >
           <View style={styles.searchLeft}>
-            <View style={[styles.searchIconBg, { backgroundColor: theme.accent + '1A' }]}>
-              <Ionicons name="search" size={17} color={theme.accent} />
-            </View>
-            <Text style={[styles.searchPlaceholder, { color: theme.textMuted }]}>Search photos, albums & dates</Text>
+            <Ionicons name="search" size={17} color={theme.accent} style={{ marginRight: 8 }} />
+            <Text style={[styles.searchPlaceholder, { color: theme.textMuted }]}>Search photos, albums, dates</Text>
           </View>
 
           {/* Quick Storage Cleaner / Shortcut */}
@@ -130,85 +164,51 @@ export default function PhotosScreen() {
               e.stopPropagation();
               router.push('/storage');
             }}
+            hitSlop={6}
           >
-            <Ionicons name="sparkles" size={16} color={theme.accent} />
+            <Ionicons name="sparkles-outline" size={15} color={theme.accent} />
           </Pressable>
         </Pressable>
       </View>
 
-      {/* Filter Chips & Sort Row */}
-      <View style={[styles.filterBar, { borderBottomColor: theme.border }]}>
-        <View style={styles.filterChipGroup}>
-          <Pressable 
-            style={[
-              styles.filterChip, 
-              filterType === 'all' 
-                ? { backgroundColor: theme.accent } 
-                : { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }
-            ]}
-            onPress={() => setFilterType('all')}
-          >
-            <Ionicons 
-              name="grid-outline" 
-              size={13} 
-              color={filterType === 'all' ? (theme.isDark ? '#0F172A' : '#FFFFFF') : theme.textMuted} 
-              style={{ marginRight: 5 }} 
-            />
-            <Text style={[
-              styles.filterChipText, 
-              { color: filterType === 'all' ? (theme.isDark ? '#0F172A' : '#FFFFFF') : theme.textMuted }
-            ]}>All</Text>
-          </Pressable>
-
-          <Pressable 
-            style={[
-              styles.filterChip, 
-              filterType === 'photo' 
-                ? { backgroundColor: theme.accent } 
-                : { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }
-            ]}
-            onPress={() => setFilterType('photo')}
-          >
-            <Ionicons 
-              name="camera-outline" 
-              size={13} 
-              color={filterType === 'photo' ? (theme.isDark ? '#0F172A' : '#FFFFFF') : theme.textMuted} 
-              style={{ marginRight: 5 }} 
-            />
-            <Text style={[
-              styles.filterChipText, 
-              { color: filterType === 'photo' ? (theme.isDark ? '#0F172A' : '#FFFFFF') : theme.textMuted }
-            ]}>Photos</Text>
-          </Pressable>
-
-          <Pressable 
-            style={[
-              styles.filterChip, 
-              filterType === 'video' 
-                ? { backgroundColor: theme.accent } 
-                : { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1 }
-            ]}
-            onPress={() => setFilterType('video')}
-          >
-            <Ionicons 
-              name="videocam-outline" 
-              size={13} 
-              color={filterType === 'video' ? (theme.isDark ? '#0F172A' : '#FFFFFF') : theme.textMuted} 
-              style={{ marginRight: 5 }} 
-            />
-            <Text style={[
-              styles.filterChipText, 
-              { color: filterType === 'video' ? (theme.isDark ? '#0F172A' : '#FFFFFF') : theme.textMuted }
-            ]}>Videos</Text>
-          </Pressable>
+      {/* Unified Filter & Sort Control Strip */}
+      <View style={styles.controlStrip}>
+        {/* Segmented Filter Pills */}
+        <View style={[styles.segmentedTrack, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          {(['all', 'photo', 'video'] as const).map((type) => {
+            const isActive = filterType === type;
+            const label = type === 'all' ? 'All' : type === 'photo' ? 'Photos' : 'Videos';
+            return (
+              <Pressable
+                key={type}
+                style={[
+                  styles.segmentBtn,
+                  isActive && { backgroundColor: theme.accent }
+                ]}
+                onPress={() => setFilterType(type)}
+                hitSlop={4}
+              >
+                <Text style={[
+                  styles.segmentText,
+                  { color: isActive ? '#FFFFFF' : theme.textMuted }
+                ]}>
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
+        {/* Coherent Sort Action */}
         <Pressable 
-          style={[styles.sortBtn, { backgroundColor: theme.card }]}
-          onPress={() => setSortOrder(s => s === 'newest' ? 'oldest' : 'newest')}
+          style={[styles.sortBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
+          onPress={() => setSortOrder(sortOrder === 'newest' ? 'oldest' : 'newest')}
+          hitSlop={4}
         >
-          <Ionicons name={sortOrder === 'newest' ? 'arrow-down' : 'arrow-up'} size={13} color={theme.accent} />
-          <Text style={[styles.sortText, { color: theme.textMuted }]}>{sortOrder === 'newest' ? 'Newest' : 'Oldest'}</Text>
+          <Ionicons name={sortOrder === 'newest' ? 'arrow-down' : 'arrow-up'} size={12} color={theme.accent} />
+          <Text style={[styles.sortText, { color: theme.textMuted }]}>
+            {sortOrder === 'newest' ? 'Newest' : 'Oldest'}
+          </Text>
         </Pressable>
       </View>
 
@@ -241,107 +241,98 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 12,
-    margin: 16,
-    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  limitedLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
   },
   limitedText: {
+    fontSize: 13,
+    fontWeight: '500',
     flex: 1,
-    fontSize: 14,
-    marginRight: 12,
+  },
+  manageBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  manageBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   headerContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingBottom: 6,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingLeft: 8,
-    paddingRight: 8,
-    height: 48,
-    borderRadius: 24,
+    paddingHorizontal: 12,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
   },
   searchLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  searchIconBg: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
   searchPlaceholder: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
   },
   avatarPill: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  filterBar: {
+  controlStrip: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  filterChipGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  filterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 18,
   },
-  filterChipActive: {
-    backgroundColor: '#67E8F9',
-  },
-  filterChipInactive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  segmentedTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 2,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  filterChipText: {
+  segmentBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 14,
+  },
+  segmentText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#94A3B8',
-  },
-  filterChipTextActive: {
-    color: '#0F172A',
-    fontWeight: '700',
   },
   sortBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
   },
   sortText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
 });
