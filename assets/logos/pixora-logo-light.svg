@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 600 700" width="600" height="700" xmlns="http://www.w3.org/2000/svg">
+  <!-- Clean White Background -->
+  <rect width="600" height="700" rx="36" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2" />
+  
+  <!-- Centered Symbol -->
+  <g transform="translate(44, 40)" fill="#0A1C3E">
+    <!-- Outer Aperture Arc with precision vertical cuts -->
+    <path d="M 232 406.19 A 160 160 0 1 0 152 369.59 L 152 322.62 A 128 128 0 1 1 232 373.73 Z" />
+    <!-- Vertical Stem -->
+    <rect x="176" y="168" width="32" height="240" />
+    <!-- Inner P-Loop / Camera Aperture Core -->
+    <path fill-rule="evenodd" d="M 256 168 A 80 80 0 1 0 256 328 A 80 80 0 1 0 256 168 Z M 256 200 A 48 48 0 1 1 256 296 A 48 48 0 1 1 256 200 Z" />
+  </g>
+  
+  <!-- Centered Wordmark -->
+  <g transform="translate(70, 560)" fill="#0A1C3E">
+    <path d="M 20 9 L 20 61 L 31 61 L 31 38 L 54 38 C 66.5 38 75 31.5 75 23.5 C 75 15.5 66.5 9 54 9 Z M 31 19 L 53 19 C 60 19 64 20.8 64 23.5 C 64 26.2 60 28 53 28 L 31 28 Z" />
+    <rect x="105" y="9" width="11" height="52" />
+    <path d="M 142 9 L 155 9 L 170 32.5 L 185 9 L 198 9 L 177 35 L 199 61 L 186 61 L 170 37.5 L 154 61 L 141 61 L 163 35 Z" />
+    <path fill-rule="evenodd" d="M 225 9 C 210 9 202 20.5 202 35 C 202 49.5 210 61 225 61 L 243 61 C 258 61 266 49.5 266 35 C 266 20.5 258 9 243 9 Z M 225 19.5 L 243 19.5 C 251 19.5 255 26 255 35 C 255 44 251 50.5 243 50.5 L 225 50.5 C 217 50.5 213 44 213 35 C 213 26 217 19.5 225 19.5 Z" />
+    <path d="M 292 9 L 292 61 L 303 61 L 303 38 L 324 38 L 337 61 L 350 61 L 335 36 C 344 34.5 348 29.5 348 23.5 C 348 15.5 339.5 9 326 9 Z M 303 19 L 325 19 C 332 19 337 20.8 337 23.5 C 337 26.2 332 28 325 28 L 303 28 Z" />
+    <path d="M 368 61 L 396 9 L 408 9 L 436 61 L 424 61 L 402 20.5 L 380 61 Z" />
+  </g>
+</svg>

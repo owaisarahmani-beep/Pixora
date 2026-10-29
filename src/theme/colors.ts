@@ -1,28 +1,29 @@
 export const colors = {
-  // Dark Palette (Deep OLED)
-  darkBackground: '#0B0F17',
-  darkSurface: '#141D2B',
-  darkCard: '#1E293B',
+  // Dark Palette (Pure OLED Black & Frosted Titanium)
+  darkBackground: '#000000',
+  darkSurface: '#1C1C1E',
+  darkCard: '#252528',
   darkBorder: 'rgba(255, 255, 255, 0.08)',
-  darkText: '#F8FAFC',
-  darkTextMuted: '#94A3B8',
-  darkAccent: '#67E8F9',
+  darkText: '#FFFFFF',
+  darkTextMuted: '#98989F',
+  darkAccent: '#0A84FF',
 
-  // Light Palette (Clean Apple Off-White)
-  lightBackground: '#F8FAFC',
+  // Light Palette (Warm off-white background, clean content surface, readable contrast)
+  lightBackground: '#F8F8FA',
   lightSurface: '#FFFFFF',
-  lightCard: '#F1F5F9',
-  lightBorder: 'rgba(15, 23, 42, 0.08)',
-  lightText: '#0F172A',
-  lightTextMuted: '#64748B',
-  lightAccent: '#0284C7',
+  lightCard: '#FFFFFF',
+  lightBorder: 'rgba(0, 0, 0, 0.06)',
+  lightText: '#111827',
+  lightTextMuted: '#6B7280',
+  lightAccent: '#007AFF',
 
   // Common Accents
-  accent: '#67E8F9',
-  secondaryAccent: '#818CF8',
+  accent: '#0A84FF',
+  secondaryAccent: '#5E5CE6',
 
   // Backward compatibility aliases
-  primaryBackground: '#0B0F17',
-  textLight: '#F8FAFC',
-  textDark: '#0F172A',
+  primaryBackground: '#000000',
+  textLight: '#FFFFFF',
+  textDark: '#111827',
 };
+
