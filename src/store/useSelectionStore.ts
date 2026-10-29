@@ -7,11 +7,13 @@ interface SelectionState {
   selectionContext: SelectionContextType;
   selectedIds: Set<string>;
   availableIds: string[];
+  scopeId: string | null;
   
   // Actions
-  enterSelectionMode: (context: 'media' | 'album', initialId?: string, availableIds?: string[]) => void;
+  enterSelectionMode: (context: 'media' | 'album', initialId?: string, availableIds?: string[], scopeId?: string | null) => void;
   exitSelectionMode: () => void;
   setAvailableIds: (ids: string[]) => void;
+  clearIfScopeMismatch: (currentScopeId: string | null) => void;
   
   toggleSelection: (id: string) => void;
   selectAll: () => void;
@@ -27,18 +29,44 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   selectionContext: null,
   selectedIds: new Set<string>(),
   availableIds: [],
+  scopeId: null,
 
-  enterSelectionMode: (context, initialId, availableIds = []) => {
+  enterSelectionMode: (context, initialId, availableIds = [], scopeId = null) => {
     set({
       isSelectionMode: true,
       selectionContext: context,
       selectedIds: initialId ? new Set([initialId]) : new Set(),
       availableIds: availableIds.length > 0 ? availableIds : get().availableIds,
+      scopeId: scopeId ?? null,
     });
   },
 
   setAvailableIds: (ids: string[]) => {
+    const current = get().availableIds;
+    if (current.length === ids.length) {
+      let identical = true;
+      for (let i = 0; i < ids.length; i++) {
+        if (current[i] !== ids[i]) {
+          identical = false;
+          break;
+        }
+      }
+      if (identical) return;
+    }
     set({ availableIds: ids });
+  },
+
+  clearIfScopeMismatch: (currentScopeId: string | null) => {
+    const state = get();
+    if (state.isSelectionMode && state.scopeId && state.scopeId !== currentScopeId) {
+      set({
+        isSelectionMode: false,
+        selectionContext: null,
+        selectedIds: new Set(),
+        availableIds: [],
+        scopeId: null,
+      });
+    }
   },
 
   exitSelectionMode: () => {
@@ -47,6 +75,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectionContext: null,
       selectedIds: new Set(),
       availableIds: [],
+      scopeId: null,
     });
   },
 
@@ -67,6 +96,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
         isSelectionMode: false,
         selectionContext: null,
         selectedIds: new Set(),
+        availableIds: [],
+        scopeId: null,
       });
     } else {
       set({ selectedIds: newSelectedIds });
@@ -85,6 +116,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       selectionContext: null,
       selectedIds: new Set(),
       availableIds: [],
+      scopeId: null,
     });
   },
 
@@ -94,6 +126,8 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
         isSelectionMode: false,
         selectionContext: null,
         selectedIds: new Set(),
+        availableIds: [],
+        scopeId: null,
       });
     } else {
       set({ selectedIds: ids });
