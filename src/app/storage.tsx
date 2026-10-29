@@ -15,6 +15,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useTheme } from '../theme/ThemeProvider';
 import { useMediaStore } from '../store/useMediaStore';
 import { PixoraMediaInfo } from '../services/media/mediaTypes';
+import { useAuthorizedMedia } from '../hooks/useVisibleMedia';
 import DeleteConfirmModal from '../components/common/DeleteConfirmModal';
 import EmptyStateView from '../components/common/EmptyStateView';
 
@@ -51,16 +52,17 @@ export default function StorageScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { media, deleteMediaAsync } = useMediaStore();
+  const authorizedMedia = useAuthorizedMedia(media, 'public');
 
   const [isScanning, setIsScanning] = useState(true);
   const [videoSizes, setVideoSizes] = useState<Map<string, number>>(new Map());
   const [selectedThreshold, setSelectedThreshold] = useState<number>(DEFAULT_THRESHOLD_BYTES);
   const [deleteTarget, setDeleteTarget] = useState<VideoSizeInfo | null>(null);
 
-  // Filter all video assets
+  // Filter all video assets from authorized public media
   const allVideos = useMemo(() => {
-    return media.filter(m => m.mediaType === 'video');
-  }, [media]);
+    return authorizedMedia.filter(m => m.mediaType === 'video');
+  }, [authorizedMedia]);
 
   // Scan file sizes for all videos
   useEffect(() => {

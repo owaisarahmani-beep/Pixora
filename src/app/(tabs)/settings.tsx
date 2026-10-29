@@ -35,7 +35,7 @@ export default function SettingsScreen() {
         {/* SECTION: Appearance / Theme Selector */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>APPEARANCE</Text>
-          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={[styles.card, { backgroundColor: theme.surface }]}>
             <View style={styles.themeSelectorContainer}>
               {themeOptions.map((opt) => {
                 const isActive = theme.themePreference === opt.value;
@@ -46,7 +46,7 @@ export default function SettingsScreen() {
                       styles.themeOptionBtn,
                       isActive && [
                         styles.themeOptionBtnActive,
-                        { backgroundColor: theme.card, borderColor: theme.border }
+                        { backgroundColor: theme.card }
                       ],
                     ]}
                     onPress={() => theme.setThemePreference(opt.value)}
@@ -72,7 +72,7 @@ export default function SettingsScreen() {
         {/* SECTION: Security */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>SECURITY</Text>
-          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={[styles.card, { backgroundColor: theme.surface }]}>
             {/* App Lock & Privacy */}
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
@@ -83,29 +83,12 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.rowBody}>
                 <Text style={[styles.rowLabel, { color: theme.text }]}>App Lock & Biometrics</Text>
+                <Text style={[styles.rowSublabel, { color: theme.textMuted }]}>Fingerprint, Face Unlock & PIN</Text>
               </View>
               <View style={styles.rowEnd}>
                 <Text style={[styles.statusHint, { color: isAppLockEnabled ? '#10B981' : theme.textMuted }]}>
                   {isAppLockEnabled ? 'On' : 'Off'}
                 </Text>
-                <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
-              </View>
-            </Pressable>
-
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-            {/* Private Vault (No count shown for privacy) */}
-            <Pressable
-              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              onPress={() => router.push('/settings/private-vault')}
-            >
-              <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
-                <Ionicons name="lock-closed-outline" size={19} color={theme.text} />
-              </View>
-              <View style={styles.rowBody}>
-                <Text style={[styles.rowLabel, { color: theme.text }]}>Private Vault</Text>
-              </View>
-              <View style={styles.rowEnd}>
                 <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
               </View>
             </Pressable>
@@ -115,7 +98,7 @@ export default function SettingsScreen() {
         {/* SECTION: Library & Storage */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>LIBRARY & STORAGE</Text>
-          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={[styles.card, { backgroundColor: theme.surface }]}>
             {/* Storage Cleaner */}
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
@@ -180,15 +163,26 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Brand Showcase Footer */}
-        <View style={styles.brandFooter}>
-          <Image
-            source={require('../../../assets/icon.png')}
-            style={styles.brandLogo}
-            contentFit="cover"
-          />
-          <Text style={[styles.brandName, { color: theme.text }]}>Pixora</Text>
-          <Text style={[styles.brandVersion, { color: theme.textMuted }]}>Version 1.0.0</Text>
+        {/* SECTION: Compact About */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>ABOUT</Text>
+          <View style={[styles.card, { backgroundColor: theme.surface }]}>
+            <View style={styles.aboutRow}>
+              <Image
+                source={require('../../../assets/icon.png')}
+                style={styles.aboutLogo}
+                contentFit="cover"
+              />
+              <View style={styles.aboutBody}>
+                <Text style={[styles.aboutName, { color: theme.text }]}>Pixora</Text>
+                <Text style={[styles.aboutVersion, { color: theme.textMuted }]}>Version 1.0.0 • Offline & Private</Text>
+              </View>
+              <View style={[styles.privacyBadge, { backgroundColor: theme.card }]}>
+                <Ionicons name="shield-checkmark" size={13} color="#10B981" />
+                <Text style={styles.privacyBadgeText}>Verified</Text>
+              </View>
+            </View>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -201,48 +195,52 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
+    paddingTop: 8,
+    paddingBottom: 10,
   },
   title: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: '700',
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
   scrollContent: {
     paddingHorizontal: 16,
+    paddingTop: 4,
   },
   section: {
-    marginBottom: 26,
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 0.8,
-    marginBottom: 8,
-    marginLeft: 6,
+    letterSpacing: 0.6,
+    marginBottom: 6,
+    marginLeft: 4,
   },
   card: {
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   themeSelectorContainer: {
     flexDirection: 'row',
-    padding: 6,
-    gap: 6,
+    padding: 4,
+    gap: 4,
   },
   themeOptionBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
     gap: 6,
   },
   themeOptionBtnActive: {
-    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   themeOptionText: {
     fontSize: 13,
@@ -252,24 +250,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingVertical: 12,
   },
   rowPressed: {
     opacity: 0.7,
   },
   iconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: 12,
   },
   rowBody: {
     flex: 1,
   },
   rowLabel: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
   },
   rowSublabel: {
@@ -282,13 +280,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   statusHint: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
   },
   countBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: 6,
   },
   countText: {
     fontSize: 12,
@@ -296,26 +294,43 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: StyleSheet.hairlineWidth,
-    marginLeft: 62,
+    marginLeft: 58,
   },
-  brandFooter: {
+  aboutRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 32,
-    gap: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  brandLogo: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    marginBottom: 6,
+  aboutLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    marginRight: 12,
   },
-  brandName: {
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+  aboutBody: {
+    flex: 1,
   },
-  brandVersion: {
-    fontSize: 12,
+  aboutName: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  aboutVersion: {
+    fontSize: 11,
     fontWeight: '500',
+    marginTop: 1,
+  },
+  privacyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  privacyBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#10B981',
   },
 });
