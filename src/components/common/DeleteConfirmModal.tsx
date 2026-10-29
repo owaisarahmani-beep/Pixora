@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,6 +27,19 @@ export default function DeleteConfirmModal({
 }: DeleteConfirmModalProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const isConfirmingRef = useRef(false);
+
+  useEffect(() => {
+    if (visible) {
+      isConfirmingRef.current = false;
+    }
+  }, [visible]);
+
+  const handleConfirmPress = () => {
+    if (isConfirmingRef.current) return;
+    isConfirmingRef.current = true;
+    onConfirm();
+  };
 
   return (
     <Modal
@@ -95,7 +108,7 @@ export default function DeleteConfirmModal({
                       transform: [{ scale: pressed ? 0.99 : 1 }],
                     },
                   ]}
-                  onPress={onConfirm}
+                  onPress={handleConfirmPress}
                 >
                   <Text style={styles.primaryBtnText}>{confirmText}</Text>
                 </Pressable>
