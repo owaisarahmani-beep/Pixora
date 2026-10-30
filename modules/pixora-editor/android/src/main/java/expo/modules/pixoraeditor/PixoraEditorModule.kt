@@ -1,5 +1,8 @@
 package expo.modules.pixoraeditor
 
+import android.content.ClipData
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -7,11 +10,14 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.net.Uri
+import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
 import java.io.FileOutputStream
+import java.util.ArrayList
 import java.util.UUID
 
 class PixoraEditorModule : Module() {
@@ -211,6 +217,107 @@ class PixoraEditorModule : Module() {
 
       // Return URI string
       outputFile.toURI().toString()
+    }
+
+    AsyncFunction("shareMediaAsync") { uris: List<String>, dialogTitle: String? ->
+      val context = appContext.reactContext ?: throw Exception("React context not available")
+      val activity = appContext.throwingActivity
+
+      if (uris.isEmpty()) {
+        return@AsyncFunction false
+      }
+
+      val contentUriList = ArrayList<Uri>()
+      var hasPhoto = false
+      var hasVideo = false
+
+      for (uriStr in uris) {
+        val parsedUri = Uri.parse(uriStr)
+        val contentUri: Uri = when (parsedUri.scheme) {
+          "content" -> parsedUri
+          "file" -> {
+            val file = File(parsedUri.path ?: uriStr)
+            FileProvider.getUriForFile(
+              context,
+              context.packageName + ".SharingFileProvider",
+              file
+            )
+          }
+          else -> {
+            val file = File(uriStr)
+            if (file.exists()) {
+              FileProvider.getUriForFile(
+                context,
+                context.packageName + ".SharingFileProvider",
+                file
+              )
+            } else {
+              parsedUri
+            }
+          }
+        }
+        contentUriList.add(contentUri)
+
+        val mime = context.contentResolver.getType(contentUri) ?: ""
+        if (mime.startsWith("video")) {
+          hasVideo = true
+        } else {
+          hasPhoto = true
+        }
+      }
+
+      val mimeType = if (hasPhoto && !hasVideo) {
+        "image/*"
+      } else if (hasVideo && !hasPhoto) {
+        "video/*"
+      } else {
+        "*/*"
+      }
+
+      val shareIntent = if (contentUriList.size == 1) {
+        Intent(Intent.ACTION_SEND).apply {
+          type = mimeType
+          putExtra(Intent.EXTRA_STREAM, contentUriList[0])
+        }
+      } else {
+        Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+          type = mimeType
+          putParcelableArrayListExtra(Intent.EXTRA_STREAM, contentUriList)
+        }
+      }
+
+      shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+      // Set ClipData containing all shared URIs for reliable permission propagation across process boundaries
+      if (contentUriList.isNotEmpty()) {
+        val clipData = ClipData.newUri(context.contentResolver, "Pixora Media", contentUriList[0])
+        for (i in 1 until contentUriList.size) {
+          clipData.addItem(ClipData.Item(contentUriList[i]))
+        }
+        shareIntent.clipData = clipData
+      }
+
+      val chooser = Intent.createChooser(shareIntent, dialogTitle ?: "Share")
+      chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+      // Explicitly grant read permissions to apps that can handle the share intent (defense in depth)
+      try {
+        val resInfoList = context.packageManager.queryIntentActivities(
+          shareIntent,
+          PackageManager.MATCH_DEFAULT_ONLY
+        )
+        for (resolveInfo in resInfoList) {
+          val packageName = resolveInfo.activityInfo.packageName
+          for (uri in contentUriList) {
+            context.grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+          }
+        }
+      } catch (_: Exception) {
+        // Chooser and clipData will grant permission to the selected recipient
+      }
+
+      activity.startActivity(chooser)
+      return@AsyncFunction true
     }
   }
 }

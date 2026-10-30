@@ -1,4 +1,4 @@
-import { NativeModule, requireNativeModule } from 'expo';
+import { NativeModule, requireOptionalNativeModule } from 'expo';
 
 export type PixoraEditOptions = {
   brightness?: number; // -1 to 1
@@ -17,8 +17,9 @@ export type PixoraEditOptions = {
   };
 };
 
-declare class PixoraEditorModule extends NativeModule<{}> {
+export declare class PixoraEditorModule extends NativeModule<{}> {
   processImageAsync(sourceUri: string, options: PixoraEditOptions): Promise<string>;
+  shareMediaAsync(uris: string[], dialogTitle?: string): Promise<boolean>;
 }
 
-export default requireNativeModule<PixoraEditorModule>('PixoraEditor');
+export default requireOptionalNativeModule<PixoraEditorModule>('PixoraEditor');

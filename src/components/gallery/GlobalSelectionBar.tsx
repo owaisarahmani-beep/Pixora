@@ -10,8 +10,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Sharing from 'expo-sharing';
 import Animated, { FadeInDown, FadeOutUp, FadeInUp, FadeOutDown } from 'react-native-reanimated';
+import { shareService } from '../../services/share/ShareService';
 import { useSelectionStore } from '../../store/useSelectionStore';
 import { usePrivacyStore } from '../../store/usePrivacyStore';
 import { useMediaStore } from '../../store/useMediaStore';
@@ -61,6 +61,7 @@ export default function GlobalSelectionBar({ tabBarHeight = 0 }: { tabBarHeight?
 
     const privacyStore = usePrivacyStore.getState();
     const mediaStore = useMediaStore.getState();
+    const albumsStore = useAlbumsStore.getState();
 
     setMoreMenuVisible(false);
 
@@ -105,21 +106,15 @@ export default function GlobalSelectionBar({ tabBarHeight = 0 }: { tabBarHeight?
             break;
           }
           case 'share': {
-            // Gather URIs for all selected items
-            const allMedia = mediaStore.media;
-            const selectedItems = ids
-              .map(id => allMedia.find(m => m.id === id))
-              .filter(Boolean) as typeof allMedia;
-
-            if (selectedItems.length === 0) break;
-            const isAvailable = await Sharing.isAvailableAsync();
-            if (!isAvailable) {
-              toastController.show({ message: 'Sharing is not available on this device', type: 'error' });
-              break;
+            const allAvailable = [
+              ...mediaStore.media,
+              ...albumsStore.activeAlbumMedia,
+              ...favoritesStore.favoritesMedia,
+            ];
+            const result = await shareService.shareSelectedAsync(ids, allAvailable);
+            if (result.success) {
+              exitSelectionMode();
             }
-            // Share first item (OS share sheet handles one file at a time on Android)
-            await Sharing.shareAsync(selectedItems[0].uri);
-            exitSelectionMode();
             break;
           }
         }

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, BackHandler, Pressable, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, BackHandler, Pressable, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, Stack, router } from 'expo-router';
 import PagerView from 'react-native-pager-view';
@@ -18,7 +18,7 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import * as Sharing from 'expo-sharing';
+import { shareService } from '../../services/share/ShareService';
 import Slider from '@react-native-community/slider';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useMediaStore } from '../../store/useMediaStore';
@@ -30,10 +30,13 @@ import ViewerControls from '../../components/viewer/ViewerControls';
 import MediaDetailsModal from '../../components/viewer/MediaDetailsModal';
 import DeleteConfirmModal from '../../components/common/DeleteConfirmModal';
 import { toastController } from '../../components/common/Toast';
+import { useSecureScreen } from '../../hooks/useSecureScreen';
+import { appLockService } from '../../services/privacy/AppLockService';
 
 import { useSearchStore } from '../../store/useSearchStore';
 import { useFavoritesStore } from '../../store/useFavoritesStore';
 import { useAlbumsStore } from '../../store/useAlbumsStore';
+import { usePrivacyStore } from '../../store/usePrivacyStore';
 import { useAuthorizedMedia, MediaContext } from '../../hooks/useVisibleMedia';
 import { SMART_ALBUM_DEFS } from '../../hooks/useSmartAlbums';
 
@@ -66,11 +69,21 @@ export default function ViewerScreen() {
   const isPrivate = source === 'private';
   const isArchive = source === 'archive';
   const isSmartAlbum = source === 'smart_album';
+
+  const isVaultUnlocked = usePrivacyStore(state => state.isVaultUnlocked);
+  const unlockedAlbums = usePrivacyStore(state => state.unlockedAlbums);
+  const vaultMedia = usePrivacyStore(state => state.vaultMedia);
+  const archivedMedia = usePrivacyStore(state => state.archivedMedia);
+
+  const isProtected = isPrivate || isLockedAlbum;
+  useSecureScreen(isProtected);
   
   const baseMedia = useMemo(() => {
     if (isSearch) return searchMedia;
     if (isFavorites) return favoritesMedia;
     if (isAlbum || isLockedAlbum) return albumMediaInfo;
+    if (isPrivate) return isVaultUnlocked ? vaultMedia : [];
+    if (isArchive) return archivedMedia;
     if (isSmartAlbum && smartAlbumIdStr) {
       if (activeSmartAlbumId === smartAlbumIdStr && smartAlbumMediaInfo.length > 0) {
         return smartAlbumMediaInfo;
@@ -79,7 +92,25 @@ export default function ViewerScreen() {
       if (def) return galleryMedia.filter(m => def.filter(m));
     }
     return galleryMedia;
-  }, [isSearch, searchMedia, isFavorites, favoritesMedia, isAlbum, isLockedAlbum, albumMediaInfo, isSmartAlbum, smartAlbumIdStr, activeSmartAlbumId, smartAlbumMediaInfo, galleryMedia]);
+  }, [
+    isSearch,
+    searchMedia,
+    isFavorites,
+    favoritesMedia,
+    isAlbum,
+    isLockedAlbum,
+    albumMediaInfo,
+    isPrivate,
+    isVaultUnlocked,
+    vaultMedia,
+    isArchive,
+    archivedMedia,
+    isSmartAlbum,
+    smartAlbumIdStr,
+    activeSmartAlbumId,
+    smartAlbumMediaInfo,
+    galleryMedia,
+  ]);
 
   const rawMedia = useMemo(() => {
     if (filterStr === 'video') {
@@ -113,11 +144,35 @@ export default function ViewerScreen() {
       if (isDeleted(idStr)) {
         return;
       }
+      // Strict authorization pre-check: Never query directAsset for unauthorized protected contexts
+      const privacyState = usePrivacyStore.getState();
+      if (isPrivate && !privacyState.isVaultUnlocked) {
+        return;
+      }
+      if (privacyState.isAssetPrivate(idStr) && !privacyState.isVaultUnlocked) {
+        return;
+      }
+
       MediaLibrary.getAssetInfoAsync(idStr).then((asset) => {
         if (isMounted && asset) {
           if (isDeleted(asset.id, asset.localUri || asset.uri)) {
             return;
           }
+          // Strict post-fetch authorization check before allowing directAsset state
+          const currentPrivacy = usePrivacyStore.getState();
+          if (currentPrivacy.isAssetPrivate(asset.id) && !currentPrivacy.isVaultUnlocked) {
+            return;
+          }
+          if (asset.albumId && currentPrivacy.isAlbumLocked(asset.albumId) && !currentPrivacy.unlockedAlbums.includes(asset.albumId)) {
+            return;
+          }
+          if (currentPrivacy.isAssetHidden(asset.id) && authContext !== 'hidden') {
+            return;
+          }
+          if (currentPrivacy.isAssetArchived(asset.id) && authContext !== 'archive') {
+            return;
+          }
+
           setDirectAsset({
             id: asset.id,
             uri: asset.localUri || asset.uri,
@@ -136,7 +191,7 @@ export default function ViewerScreen() {
     return () => {
       isMounted = false;
     };
-  }, [idStr, media, isDeleted]);
+  }, [idStr, media, isDeleted, isPrivate, isVaultUnlocked, authContext]);
 
   const effectiveMedia = useMemo(() => {
     const trashedIds = new Set(trashedItems.map(i => String(i.id)));
@@ -148,23 +203,64 @@ export default function ViewerScreen() {
       return false;
     };
 
+    const isAuthorizedAsset = (item: PixoraMediaInfo) => {
+      if (isExcluded(item.id)) return false;
+      const privacyState = usePrivacyStore.getState();
+      if (privacyState.isAssetPrivate(item.id) && !isVaultUnlocked) return false;
+      if (item.albumId && privacyState.isAlbumLocked(item.albumId) && !privacyState.unlockedAlbums.includes(item.albumId)) return false;
+      if (privacyState.isAssetHidden(item.id) && authContext !== 'hidden') return false;
+      if (privacyState.isAssetArchived(item.id) && authContext !== 'archive') return false;
+      return true;
+    };
+
     let base = media;
     if (base.length > 0) {
-      if (idStr && !base.some(m => m.id === idStr) && directAsset && !isExcluded(directAsset.id)) {
+      if (idStr && !base.some(m => m.id === idStr) && directAsset && isAuthorizedAsset(directAsset)) {
         base = [directAsset, ...base];
       }
-    } else if (directAsset && !isExcluded(directAsset.id)) {
+    } else if (directAsset && isAuthorizedAsset(directAsset)) {
       base = [directAsset];
     }
-    return base.filter(m => !isExcluded(m.id));
-  }, [media, directAsset, idStr, trashedItems, permanentlyDeletedIds]);
+    return base.filter(m => isAuthorizedAsset(m));
+  }, [media, directAsset, idStr, trashedItems, permanentlyDeletedIds, isVaultUnlocked, authContext]);
+
+  const handleDismiss = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
+  }, []);
+
+  // If viewing a private photo or locked album and authorization is revoked, immediately exit
+  useEffect(() => {
+    const isUnauthorizedPrivate = isPrivate && !isVaultUnlocked;
+    const isUnauthorizedLocked = isLockedAlbum && !!activeAlbumId && !unlockedAlbums.includes(activeAlbumId);
+
+    if (isUnauthorizedPrivate || isUnauthorizedLocked) {
+      handleDismiss();
+    }
+  }, [isPrivate, isVaultUnlocked, isLockedAlbum, activeAlbumId, unlockedAlbums, handleDismiss]);
+
+  // Dismiss viewer when app goes to background while displaying protected media
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState === 'inactive' || nextState === 'background') {
+        if (appLockService.isAuthenticating) return;
+        if (isPrivate || isLockedAlbum || usePrivacyStore.getState().isAppLockEnabled) {
+          handleDismiss();
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [isPrivate, isLockedAlbum, handleDismiss]);
 
   // If currently viewed item was deleted and no media remains, return to gallery
   useEffect(() => {
     if (effectiveMedia.length === 0 && initialSyncDoneRef.current) {
-      router.back();
+      handleDismiss();
     }
-  }, [effectiveMedia.length]);
+  }, [effectiveMedia.length, handleDismiss]);
 
   const loadMoreMedia = isSearch || isFavorites ? () => {} : (isAlbum || isLockedAlbum) ? albumLoadMore : galleryLoadMore;
   const hasNextPage = isSearch || isFavorites ? false : (isAlbum || isLockedAlbum) ? albumHasNext : galleryHasNext;
@@ -193,11 +289,10 @@ export default function ViewerScreen() {
   }, [idStr, effectiveMedia, initialIndex]);
 
   const safeIndex = Math.max(0, Math.min(currentIndex, Math.max(0, effectiveMedia.length - 1)));
-  const currentMedia = effectiveMedia[safeIndex] 
-    || effectiveMedia.find(m => m.id === idStr) 
-    || directAsset;
+  const currentMedia = effectiveMedia[safeIndex] || effectiveMedia.find(m => m.id === idStr);
   
-  // Proactively prefetch adjacent photo assets into memory-disk cache to make swiping instantaneous
+  // Proactively prefetch adjacent photo assets with deduplication cache to keep Glide queues light
+  const prefetchedUrisRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (effectiveMedia.length === 0) return;
     const urisToPrefetch: string[] = [];
@@ -206,15 +301,29 @@ export default function ViewerScreen() {
       currentIndex - 1,
       currentIndex + 2,
       currentIndex - 2,
+      currentIndex + 3,
+      currentIndex - 3,
     ];
     for (const idx of windowIndices) {
       if (idx >= 0 && idx < effectiveMedia.length) {
         const item = effectiveMedia[idx];
         if (item && item.mediaType === 'photo' && item.uri) {
-          urisToPrefetch.push(item.uri);
+          if (!prefetchedUrisRef.current.has(item.uri)) {
+            urisToPrefetch.push(item.uri);
+            prefetchedUrisRef.current.add(item.uri);
+          }
         }
       }
     }
+
+    // Bound memory size of deduplication set
+    if (prefetchedUrisRef.current.size > 80) {
+      prefetchedUrisRef.current.clear();
+      for (const uri of urisToPrefetch) {
+        prefetchedUrisRef.current.add(uri);
+      }
+    }
+
     if (urisToPrefetch.length > 0) {
       Image.prefetch(urisToPrefetch, 'memory-disk').catch(() => {});
     }
@@ -224,14 +333,6 @@ export default function ViewerScreen() {
   const translateX = useSharedValue(0);
   const scale = useSharedValue(1);
   const detailsProgress = useSharedValue(0);
-
-  const handleDismiss = useCallback(() => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/(tabs)');
-    }
-  }, []);
 
   // Android hardware & bottom system navigation bar back button:
   // Directly exits the viewer and returns to the calling screen (Home tab or Album)
@@ -341,6 +442,16 @@ export default function ViewerScreen() {
     }
   };
 
+  const handlePageScroll = useCallback(
+    (e: any) => {
+      const pos = Math.round(e.nativeEvent.position);
+      if (typeof pos === 'number' && pos >= 0 && pos < effectiveMedia.length && Math.abs(pos - currentIndex) >= 2) {
+        setCurrentIndex(pos);
+      }
+    },
+    [effectiveMedia.length, currentIndex]
+  );
+
   // Fluid vertical drag handler:
   // - Downwards: Smooth drag to dismiss with scaling & fade
   // - Upwards: 1:1 tactile tracking that pulls up the Details sheet, keeping the image completely still
@@ -439,18 +550,21 @@ export default function ViewerScreen() {
             style={styles.pager}
             initialPage={initialIndex}
             onPageSelected={handlePageSelected}
+            onPageScroll={handlePageScroll}
             scrollEnabled={!isZoomed && !isSeeking}
             offscreenPageLimit={2}
           >
             {effectiveMedia.map((item, index) => {
-              if (Math.abs(index - currentIndex) > 2) {
+              const isActive = index === currentIndex;
+              const isWithinWindow = Math.abs(index - currentIndex) <= 4;
+              if (!isWithinWindow && !isActive) {
                 return <View key={item.id} style={styles.page} />;
               }
               return (
                 <MediaPage
                   key={item.id}
                   item={item}
-                  isActive={index === currentIndex}
+                  isActive={isActive}
                   detailsProgress={detailsProgress}
                   onDeleteMedia={handleDeleteCurrentMedia}
                 />
@@ -486,10 +600,31 @@ const formatVideoTime = (totalSeconds: number): string => {
 };
 
 const InactiveVideoPage = React.memo(({ item }: { item: PixoraMediaInfo }) => {
+  const [hasError, setHasError] = useState(false);
+
   return (
     <View style={styles.page}>
-      <View style={[styles.media, styles.videoPosterFallback]}>
-        <Ionicons name="videocam-outline" size={48} color="rgba(255, 255, 255, 0.4)" />
+      <View style={styles.mediaWrapper}>
+        <View style={[styles.media, StyleSheet.absoluteFill as any, styles.videoPosterFallback]}>
+          <Ionicons name="videocam-outline" size={48} color="rgba(255, 255, 255, 0.4)" />
+        </View>
+
+        {!hasError && (
+          <Image
+            source={{ uri: item.uri }}
+            style={[styles.media, StyleSheet.absoluteFill as any]}
+            contentFit="contain"
+            cachePolicy="memory-disk"
+            priority="normal"
+            allowDownscaling={true}
+            transition={100}
+            onError={() => setHasError(true)}
+          />
+        )}
+
+        <View style={styles.centerPlayBtn} pointerEvents="none">
+          <Ionicons name="play" size={34} color="#FFFFFF" style={{ marginLeft: 3 }} />
+        </View>
       </View>
     </View>
   );
@@ -767,9 +902,7 @@ const VideoPage = ({
   // Share
   const handleShare = async () => {
     try {
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(item.uri);
-      }
+      await shareService.shareSingleAsync(item);
     } catch (e) {
       console.error('Share failed', e);
     }

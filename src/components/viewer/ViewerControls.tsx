@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, TouchableWithoutFeedback, Platform, ActionSheetIOS } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import * as Sharing from 'expo-sharing';
+import { shareService } from '../../services/share/ShareService';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import Animated, { 
@@ -85,9 +85,7 @@ export default function ViewerControls({ item, detailsProgress, onDeleteMedia }:
 
   const handleShare = async () => {
     try {
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(item.uri);
-      }
+      await shareService.shareSingleAsync(item);
     } catch (e) {
       console.error('Share failed', e);
     }
