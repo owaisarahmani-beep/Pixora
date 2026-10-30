@@ -184,6 +184,7 @@ export default function PhotoGrid({
       <AnyFlashList
         ref={flashListRef}
         data={data}
+        keyboardShouldPersistTaps="handled"
         estimatedItemSize={rowHeight}
         overrideItemLayout={overrideItemLayout}
         renderItem={renderItem}

@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, Switch, ScrollView, Pressable } from 'react-native';
 import { usePrivacyStore } from '../../store/usePrivacyStore';
 import { useTheme } from '../../theme/ThemeProvider';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { toastController } from '../../components/common/Toast';
 
 export default function PrivacySettingsScreen() {
   const theme = useTheme();
@@ -16,11 +17,33 @@ export default function PrivacySettingsScreen() {
     setLockPolicy
   } = usePrivacyStore();
 
+  // Re-check hardware / PIN capability whenever privacy settings screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      usePrivacyStore.getState().initialize();
+    }, [])
+  );
+
   const toggleAppLock = async (value: boolean) => {
+    if (!isSupportedOnDevice) {
+      toastController.show({
+        message: 'Screen lock required: Set up a PIN, pattern, or biometric in your device Settings to enable App Lock.',
+        type: 'error',
+      });
+      return;
+    }
     if (value) {
-      await enableAppLock(lockPolicy || 'immediate');
+      const success = await enableAppLock(lockPolicy || 'immediate');
+      if (success) {
+        toastController.show({ message: 'App Lock enabled', type: 'success' });
+      } else {
+        toastController.show({ message: 'Authentication required to enable App Lock', type: 'error' });
+      }
     } else {
-      await disableAppLock();
+      const success = await disableAppLock();
+      if (success) {
+        toastController.show({ message: 'App Lock disabled', type: 'success' });
+      }
     }
   };
 
@@ -43,14 +66,26 @@ export default function PrivacySettingsScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>AUTHENTICATION</Text>
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <View style={styles.row}>
+            <Pressable
+              style={styles.row}
+              onPress={() => {
+                if (!isSupportedOnDevice) {
+                  toastController.show({
+                    message: 'Screen lock required: Set up a PIN, pattern, or biometric in your device Settings to enable App Lock.',
+                    type: 'error',
+                  });
+                } else {
+                  toggleAppLock(!isAppLockEnabled);
+                }
+              }}
+            >
               <View style={[styles.iconWrap, { backgroundColor: theme.isDark ? '#1E293B' : '#E2E8F0' }]}>
                 <Ionicons name="finger-print-outline" size={19} color={theme.text} />
               </View>
               <View style={styles.rowBody}>
                 <Text style={[styles.rowLabel, { color: theme.text }]}>Require Biometrics</Text>
                 <Text style={[styles.rowSublabel, { color: theme.textMuted }]}>
-                  {isSupportedOnDevice ? 'Fingerprint, Face ID or PIN' : 'Device PIN'}
+                  {isSupportedOnDevice ? 'Fingerprint, Face ID or PIN' : 'Device lock not set up'}
                 </Text>
               </View>
               <Switch
@@ -60,7 +95,7 @@ export default function PrivacySettingsScreen() {
                 trackColor={{ false: theme.card, true: theme.accent }}
                 thumbColor="#FFFFFF"
               />
-            </View>
+            </Pressable>
 
             {isAppLockEnabled && (
               <>

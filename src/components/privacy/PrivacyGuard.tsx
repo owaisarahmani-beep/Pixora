@@ -3,21 +3,22 @@ import { View, Text, StyleSheet, AppState, AppStateStatus, Pressable } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import { usePrivacyStore } from '../../store/usePrivacyStore';
 import { useTheme } from '../../theme/ThemeProvider';
+import { appLockService } from '../../services/privacy/AppLockService';
 
 export default function PrivacyGuard({ children }: { children: React.ReactNode }) {
   const theme = useTheme();
   
   const { 
     isAppLockEnabled, 
-    lockPolicy, 
     isUnlocked, 
     isCapabilityChecked, 
     initialize, 
-    lock, 
     unlock 
   } = usePrivacyStore();
 
   const appStateRef = useRef(AppState.currentState);
+  const wasAuthenticatingRef = useRef(false);
+  const hasInitialUnlockFiredRef = useRef(false);
 
   useEffect(() => {
     // Initialize the store on mount (loads async storage)
@@ -25,33 +26,40 @@ export default function PrivacyGuard({ children }: { children: React.ReactNode }
   }, [initialize]);
 
   useEffect(() => {
-    if (!isAppLockEnabled) return;
-
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      // Transitioning to background/inactive
-      if (
-        appStateRef.current === 'active' &&
-        (nextAppState === 'inactive' || nextAppState === 'background')
-      ) {
-        if (lockPolicy === 'immediate') {
-          lock();
-        } else if (lockPolicy === 'inactivity') {
-          // For Stage 5, "inactivity" is simple: we lock on background.
-          // Inactivity could be more complex (e.g. timeout), but as per user instructions:
-          // "If a reliable inactivity policy is too complex for this stage, implement immediate background locking first and document the limitation."
-          // We will just treat 'inactivity' the same as 'immediate' for now if they are physically backgrounded.
-          // Wait, 'inactivity' might mean 1 minute. Let's just lock immediately on background.
-          lock();
+      // If the app is currently showing the native biometric / PIN challenge dialog,
+      // the OS momentarily marks the window as 'inactive'. Do not lock out the user while authenticating.
+      if (appLockService.isAuthenticating) {
+        wasAuthenticatingRef.current = true;
+        appStateRef.current = nextAppState;
+        return;
+      }
+
+      // Transitioning to background or inactive (screen turned off or switched to another app)
+      if (nextAppState === 'inactive' || nextAppState === 'background') {
+        const privacyState = usePrivacyStore.getState();
+        // Ephemeral sessions (Private Vault, Locked Albums, in-memory registries) must lock on background
+        privacyState.clearAllSessions();
+
+        // If global App Lock is enabled, lock the entire app
+        if (privacyState.isAppLockEnabled) {
+          privacyState.lock();
         }
       }
 
-      // Transitioning to foreground
+      // Transitioning back to foreground active
       if (
         (appStateRef.current === 'inactive' || appStateRef.current === 'background') &&
         nextAppState === 'active'
       ) {
-        // We are now active. If we are locked, prompt for unlock immediately.
-        if (!usePrivacyStore.getState().isUnlocked) {
+        const privacyState = usePrivacyStore.getState();
+        // Re-check hardware / PIN capability so returning from system settings updates capability
+        privacyState.initialize();
+
+        // If returning from an authentication dialog (success or cancel), do not auto-retrigger prompt
+        if (wasAuthenticatingRef.current) {
+          wasAuthenticatingRef.current = false;
+        } else if (privacyState.isAppLockEnabled && !privacyState.isUnlocked) {
           unlock();
         }
       }
@@ -62,11 +70,18 @@ export default function PrivacyGuard({ children }: { children: React.ReactNode }
     return () => {
       subscription.remove();
     };
-  }, [isAppLockEnabled, lockPolicy, lock, unlock]);
+  }, [unlock]);
 
   // Initial trigger for unlock if we mount in an active state and are locked
   useEffect(() => {
-    if (isCapabilityChecked && isAppLockEnabled && !isUnlocked && AppState.currentState === 'active') {
+    if (
+      isCapabilityChecked &&
+      isAppLockEnabled &&
+      !isUnlocked &&
+      AppState.currentState === 'active' &&
+      !hasInitialUnlockFiredRef.current
+    ) {
+      hasInitialUnlockFiredRef.current = true;
       unlock();
     }
   }, [isCapabilityChecked, isAppLockEnabled, isUnlocked, unlock]);

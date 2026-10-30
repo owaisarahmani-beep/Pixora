@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, SectionList, TextInput, Modal, TouchableWithoutFeedback } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -92,17 +92,27 @@ export default function AlbumsScreen() {
     }, [])
   );
   
+  const isNavigatingRef = useRef(false);
   const handlePressAlbum = async (albumId: string) => {
     if (isSelectionMode) {
       toggleSelection(albumId);
       return;
     }
-    const isLocked = lockedAlbumIds.includes(albumId);
-    if (isLocked) {
-      const success = await unlockAlbum(albumId);
-      if (!success) return;
+    if (isNavigatingRef.current) return;
+    isNavigatingRef.current = true;
+
+    try {
+      const isLocked = lockedAlbumIds.includes(albumId);
+      if (isLocked) {
+        const success = await unlockAlbum(albumId);
+        if (!success) return;
+      }
+      router.push(`/album/${albumId}`);
+    } finally {
+      setTimeout(() => {
+        isNavigatingRef.current = false;
+      }, 300);
     }
-    router.push(`/album/${albumId}`);
   };
 
   const handleLongPressAlbum = (albumId: string) => {
@@ -224,6 +234,7 @@ export default function AlbumsScreen() {
 
       <SectionList<any, any>
         sections={sections}
+        keyboardShouldPersistTaps="handled"
         refreshing={isLoadingAlbums}
         onRefresh={() => {
           loadAlbums(true);

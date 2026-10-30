@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, TextInput, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, TextInput, TouchableWithoutFeedback, AppState, AppStateStatus } from 'react-native';
 import { useLocalSearchParams, Stack, router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -14,6 +14,7 @@ import EmptyStateView from '../../components/common/EmptyStateView';
 import GlobalSelectionBar from '../../components/gallery/GlobalSelectionBar';
 import DeleteConfirmModal from '../../components/common/DeleteConfirmModal';
 import { toastController } from '../../components/common/Toast';
+import { appLockService } from '../../services/privacy/AppLockService';
 
 export default function AlbumMediaScreen() {
   const { id } = useLocalSearchParams();
@@ -27,6 +28,26 @@ export default function AlbumMediaScreen() {
   
   // Protect screen if album is locked
   useSecureScreen(isLocked);
+
+  // Lock album on background and prompt on foreground return
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState === 'inactive' || nextState === 'background') {
+        if (appLockService.isAuthenticating) return;
+        if (isLocked) {
+          usePrivacyStore.getState().lockAlbum(albumId);
+        }
+      }
+      if (nextState === 'active') {
+        if (appLockService.isAuthenticating) return;
+        const currentPrivacy = usePrivacyStore.getState();
+        if (isLocked && !currentPrivacy.unlockedAlbums.includes(albumId)) {
+          unlockAlbumContent(albumId);
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [isLocked, albumId, unlockAlbumContent]);
 
   const albums = useAlbumsStore((state) => state.albums);
   const activeAlbumMedia = useAlbumsStore((state) => state.activeAlbumMedia);
@@ -151,6 +172,14 @@ export default function AlbumMediaScreen() {
         <Stack.Screen options={{ title: 'Locked Album', headerBackTitle: 'Albums' }} />
         <Ionicons name="lock-closed" size={48} color={theme.textMuted} />
         <Text style={{ color: theme.textMuted, marginTop: 16 }}>Authentication Required</Text>
+        <Pressable
+          style={{ backgroundColor: theme.accent, marginTop: 24, paddingHorizontal: 28, paddingVertical: 12, borderRadius: 10 }}
+          onPress={async () => {
+            await unlockAlbumContent(albumId);
+          }}
+        >
+          <Text style={{ color: '#FFFFFF', fontWeight: '600', fontSize: 16 }}>Unlock Album</Text>
+        </Pressable>
       </View>
     );
   }

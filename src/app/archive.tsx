@@ -120,6 +120,7 @@ export default function ArchiveScreen() {
           const combined = [...cachedAssets, ...fetchedAssets];
           combined.sort((a, b) => (b.creationTime || 0) - (a.creationTime || 0));
           setRawMedia(combined);
+          usePrivacyStore.getState().setArchivedMedia(combined);
           setIsLoadingMedia(false);
         }
       } catch (e) {

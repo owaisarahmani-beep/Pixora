@@ -7,6 +7,8 @@ export type AppLockCapability = {
 };
 
 class AppLockService {
+  isAuthenticating: boolean = false;
+
   /**
    * Checks if the device can perform authentication (Biometric or Device PIN)
    */
@@ -30,6 +32,8 @@ class AppLockService {
    * Fails closed on any error or cancellation.
    */
   async authenticateAsync(promptMessage: string = 'Unlock Pixora'): Promise<boolean> {
+    if (this.isAuthenticating) return false;
+    this.isAuthenticating = true;
     try {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage,
@@ -42,6 +46,8 @@ class AppLockService {
     } catch (e) {
       console.warn('Authentication encountered an unexpected error:', e);
       return false;
+    } finally {
+      this.isAuthenticating = false;
     }
   }
 }

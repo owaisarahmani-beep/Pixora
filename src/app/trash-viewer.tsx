@@ -8,6 +8,8 @@ import {
   Dimensions,
   Platform,
   Alert,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,11 +22,13 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useTrashStore, TrashedItem, ensureTrashHydrated } from '../store/useTrashStore';
 import { useMediaStore } from '../store/useMediaStore';
 import { useAlbumsStore } from '../store/useAlbumsStore';
+import { usePrivacyStore } from '../store/usePrivacyStore';
 import { mediaStoreService } from '../services/media/MediaStoreService';
 import { PixoraMediaInfo } from '../services/media/mediaTypes';
 import ZoomableView from '../components/viewer/ZoomableView';
 import DeleteConfirmModal from '../components/common/DeleteConfirmModal';
 import { toastController } from '../components/common/Toast';
+import { appLockService } from '../services/privacy/AppLockService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -277,7 +281,8 @@ export default function TrashViewerScreen() {
   const safeIndex = Math.min(currentIndex, Math.max(0, items.length - 1));
   const currentItem: TrashedItem | undefined = items[safeIndex];
 
-  // Proactively prefetch adjacent trashed photo assets into memory-disk cache
+  // Proactively prefetch adjacent trashed photo assets with deduplication cache
+  const prefetchedUrisRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (items.length === 0) return;
     const urisToPrefetch: string[] = [];
@@ -286,15 +291,28 @@ export default function TrashViewerScreen() {
       safeIndex - 1,
       safeIndex + 2,
       safeIndex - 2,
+      safeIndex + 3,
+      safeIndex - 3,
     ];
     for (const idx of windowIndices) {
       if (idx >= 0 && idx < items.length) {
         const item = items[idx];
         if (item && item.mediaType === 'photo' && item.uri) {
-          urisToPrefetch.push(item.uri);
+          if (!prefetchedUrisRef.current.has(item.uri)) {
+            urisToPrefetch.push(item.uri);
+            prefetchedUrisRef.current.add(item.uri);
+          }
         }
       }
     }
+
+    if (prefetchedUrisRef.current.size > 80) {
+      prefetchedUrisRef.current.clear();
+      for (const uri of urisToPrefetch) {
+        prefetchedUrisRef.current.add(uri);
+      }
+    }
+
     if (urisToPrefetch.length > 0) {
       Image.prefetch(urisToPrefetch, 'memory-disk').catch(() => {});
     }
@@ -311,27 +329,46 @@ export default function TrashViewerScreen() {
     }
   }, [items.length]);
 
-  // Hardware back button handler
-  useEffect(() => {
-    const onBackPress = () => {
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/trash');
-      }
-      return true;
-    };
-    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => sub.remove();
-  }, []);
-
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     if (router.canGoBack()) {
       router.back();
     } else {
       router.replace('/trash');
     }
-  };
+  }, []);
+
+  // Hardware back button handler
+  useEffect(() => {
+    const onBackPress = () => {
+      handleBack();
+      return true;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [handleBack]);
+
+  // Exit viewer if app backgrounds while App Lock is active
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState === 'inactive' || nextState === 'background') {
+        if (appLockService.isAuthenticating) return;
+        if (usePrivacyStore.getState().isAppLockEnabled) {
+          handleBack();
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [handleBack]);
+
+  const handlePageScroll = useCallback(
+    (e: any) => {
+      const pos = Math.round(e.nativeEvent.position);
+      if (typeof pos === 'number' && pos >= 0 && pos < items.length && Math.abs(pos - currentIndex) >= 2) {
+        setCurrentIndex(pos);
+      }
+    },
+    [items.length, currentIndex]
+  );
 
   // Revalidate Trash membership before Restore
   const handleRestoreCurrent = async () => {
@@ -520,11 +557,13 @@ export default function TrashViewerScreen() {
         style={StyleSheet.absoluteFill}
         initialPage={currentIndex}
         onPageSelected={(e) => setCurrentIndex(e.nativeEvent.position)}
+        onPageScroll={handlePageScroll}
         offscreenPageLimit={2}
       >
         {items.map((item, index) => {
           const isItemActive = index === safeIndex;
-          if (Math.abs(index - safeIndex) > 2) {
+          const isWithinWindow = Math.abs(index - safeIndex) <= 4;
+          if (!isWithinWindow && !isItemActive) {
             return <View key={item.id} style={styles.page} />;
           }
           return (
@@ -533,8 +572,22 @@ export default function TrashViewerScreen() {
                 isItemActive ? (
                   <TrashVideoItem item={item} isActive={isItemActive} />
                 ) : (
-                  <View style={[styles.fullMedia, styles.videoPosterFallback]}>
-                    <Ionicons name="videocam-outline" size={48} color="rgba(255, 255, 255, 0.4)" />
+                  <View style={styles.mediaContainer}>
+                    <View style={[styles.fullMedia, StyleSheet.absoluteFill as any, styles.videoPosterFallback]}>
+                      <Ionicons name="videocam-outline" size={48} color="rgba(255, 255, 255, 0.4)" />
+                    </View>
+                    <Image
+                      source={{ uri: item.uri }}
+                      style={[styles.fullMedia, StyleSheet.absoluteFill as any]}
+                      contentFit="contain"
+                      cachePolicy="memory-disk"
+                      priority="normal"
+                      allowDownscaling={true}
+                      transition={100}
+                    />
+                    <View style={styles.centerPlayBtn} pointerEvents="none">
+                      <Ionicons name="play" size={34} color="#FFFFFF" style={{ marginLeft: 3 }} />
+                    </View>
                   </View>
                 )
               ) : (

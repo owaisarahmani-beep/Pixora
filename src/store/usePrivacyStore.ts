@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { appLockService } from '../services/privacy/AppLockService';
+import { PixoraMediaInfo } from '../services/media/mediaTypes';
 
 export type LockPolicy = 'immediate' | 'inactivity';
 
@@ -24,12 +25,16 @@ interface PrivacyState {
   // Auth Sessions
   isVaultUnlocked: boolean;
   unlockedAlbums: string[];
+  vaultMedia: PixoraMediaInfo[];
+  archivedMedia: PixoraMediaInfo[];
 
   // Actions
   initialize: () => Promise<void>;
   enableAppLock: (policy: LockPolicy) => Promise<boolean>;
   disableAppLock: () => Promise<boolean>;
   setLockPolicy: (policy: LockPolicy) => Promise<void>;
+  setVaultMedia: (media: PixoraMediaInfo[]) => void;
+  setArchivedMedia: (media: PixoraMediaInfo[]) => void;
   
   // Ephemeral Actions
   lock: () => void;
@@ -84,6 +89,11 @@ export const usePrivacyStore = create<PrivacyState>((set, get) => ({
   
   isVaultUnlocked: false,
   unlockedAlbums: [],
+  vaultMedia: [],
+  archivedMedia: [],
+
+  setVaultMedia: (media: PixoraMediaInfo[]) => set({ vaultMedia: media }),
+  setArchivedMedia: (media: PixoraMediaInfo[]) => set({ archivedMedia: media }),
 
   initialize: async () => {
     try {
@@ -188,7 +198,7 @@ export const usePrivacyStore = create<PrivacyState>((set, get) => ({
     return success;
   },
 
-  lockVault: () => set({ isVaultUnlocked: false }),
+  lockVault: () => set({ isVaultUnlocked: false, vaultMedia: [] }),
 
   unlockAlbum: async (albumId: string) => {
     const success = await appLockService.authenticateAsync('Unlock Album');
@@ -200,7 +210,7 @@ export const usePrivacyStore = create<PrivacyState>((set, get) => ({
 
   lockAlbum: (albumId: string) => set(state => ({ unlockedAlbums: state.unlockedAlbums.filter(id => id !== albumId) })),
 
-  clearAllSessions: () => set({ isVaultUnlocked: false, unlockedAlbums: [] }),
+  clearAllSessions: () => set({ isVaultUnlocked: false, unlockedAlbums: [], vaultMedia: [] }),
 
   hideAlbum: async (albumId: string) => {
     const state = get();
@@ -242,7 +252,10 @@ export const usePrivacyStore = create<PrivacyState>((set, get) => ({
 
   removeAssetsFromPrivate: async (assetIds: string[]) => {
     const state = get();
-    set({ privateAssetIds: state.privateAssetIds.filter(id => !assetIds.includes(id)) });
+    set({
+      privateAssetIds: state.privateAssetIds.filter(id => !assetIds.includes(id)),
+      vaultMedia: state.vaultMedia.filter(m => !assetIds.includes(m.id)),
+    });
     await savePrivacyState(get());
   },
 

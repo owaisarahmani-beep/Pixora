@@ -22,6 +22,7 @@
       "expo-video",
       "expo-sharing",
       "expo-font",
+      "expo-local-authentication",
       [
         "expo-splash-screen",
         {

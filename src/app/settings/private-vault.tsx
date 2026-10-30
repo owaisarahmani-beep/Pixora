@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -12,6 +12,7 @@ import { mediaStoreService } from '../../services/media/MediaStoreService';
 import { PixoraMediaInfo } from '../../services/media/mediaTypes';
 import { isVideoMedia, formatVideoDuration } from '../../components/gallery/PhotoThumbnail';
 import EmptyStateView from '../../components/common/EmptyStateView';
+import { appLockService } from '../../services/privacy/AppLockService';
 
 // Helper component to measure first render timing safely inside an effect
 function FirstItemMountTracker({ onMount }: { onMount: () => void }) {
@@ -27,7 +28,7 @@ export default function PrivateVaultScreen() {
   const authAttemptedRef = useRef(false);
 
   // Raw media queried after authorization
-  const [rawMedia, setRawMedia] = useState<PixoraMediaInfo[]>([]);
+  const [rawMedia, setRawMedia] = useState<PixoraMediaInfo[]>(() => usePrivacyStore.getState().vaultMedia);
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
   const [isQueryError, setIsQueryError] = useState(false);
 
@@ -43,9 +44,32 @@ export default function PrivateVaultScreen() {
   // Secure screen to prevent OS switcher preview leak
   useSecureScreen(true);
 
+  // Lock vault on background and auto-prompt unlock on foreground return
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState === 'inactive' || nextState === 'background') {
+        if (appLockService.isAuthenticating) return;
+        usePrivacyStore.getState().lockVault();
+        authAttemptedRef.current = false;
+      }
+      if (nextState === 'active') {
+        if (appLockService.isAuthenticating) return;
+        if (!usePrivacyStore.getState().isVaultUnlocked && !authAttemptedRef.current) {
+          authAttemptedRef.current = true;
+          unlockVault().then(success => {
+            if (success) {
+              perfTimings.current.authSuccessTime = performance.now();
+            }
+          });
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [unlockVault]);
+
   // 1. Authentication Session Gate
   useEffect(() => {
-    if (!isVaultUnlocked && !authAttemptedRef.current) {
+    if (!isVaultUnlocked && !authAttemptedRef.current && AppState.currentState === 'active') {
       authAttemptedRef.current = true;
       unlockVault().then(success => {
         if (success) {
@@ -127,35 +151,28 @@ export default function PrivateVaultScreen() {
   // 2. Lifecycle & Session Lock Observer
   useEffect(() => {
     if (!isVaultUnlocked) {
+      authAttemptedRef.current = false;
       return;
     }
 
     let isCancelled = false;
     const tVisible = performance.now();
     perfTimings.current.vaultVisibleTime = tVisible;
-    if (__DEV__) {
-      const diff1 = perfTimings.current.authSuccessTime > 0
-        ? tVisible - perfTimings.current.authSuccessTime
-        : 0;
-      console.log(`[PixoraVaultPerf] 1. Auth success -> Vault screen visible: ${diff1.toFixed(1)}ms`);
-    }
 
     async function fetchVaultMedia() {
+      // If no cached vault media exists, show loading spinner
+      if (usePrivacyStore.getState().vaultMedia.length === 0) {
+        setIsLoadingMedia(true);
+      }
+
       try {
         const currentPrivateIds = usePrivacyStore.getState().privateAssetIds;
         if (currentPrivateIds.length === 0) {
           await Promise.resolve();
-          if (!isCancelled) {
+          if (!isCancelled && usePrivacyStore.getState().isVaultUnlocked) {
             setRawMedia([]);
+            usePrivacyStore.getState().setVaultMedia([]);
             setIsLoadingMedia(false);
-            const tQuery = performance.now();
-            perfTimings.current.queryCompleteTime = tQuery;
-            if (__DEV__) {
-              const diff2 = perfTimings.current.vaultVisibleTime > 0
-                ? tQuery - perfTimings.current.vaultVisibleTime
-                : 0;
-              console.log(`[PixoraVaultPerf] 2. Vault visible -> Authorized query complete: ${diff2.toFixed(1)}ms (0 items)`);
-            }
           }
           return;
         }
@@ -183,11 +200,13 @@ export default function PrivateVaultScreen() {
           : [];
 
         await Promise.resolve();
-        if (!isCancelled) {
+        // Guard against race condition: ensure session is STILL unlocked before storing
+        if (!isCancelled && usePrivacyStore.getState().isVaultUnlocked) {
           const combined = [...cachedAssets, ...fetchedAssets];
           combined.sort((a, b) => (b.creationTime || 0) - (a.creationTime || 0));
 
           setRawMedia(combined);
+          usePrivacyStore.getState().setVaultMedia(combined);
           setIsLoadingMedia(false);
 
           const tQuery = performance.now();
@@ -200,7 +219,7 @@ export default function PrivateVaultScreen() {
           }
         }
       } catch (e) {
-        if (!isCancelled) {
+        if (!isCancelled && usePrivacyStore.getState().isVaultUnlocked) {
           console.error('Failed to query vault media', e);
           setIsQueryError(true);
           setIsLoadingMedia(false);
@@ -253,7 +272,17 @@ export default function PrivateVaultScreen() {
         <Text style={[styles.authSubtitle, { color: theme.textMuted }]}>
           Authentication required to view protected media
         </Text>
-        <ActivityIndicator size="small" color={theme.accent} style={{ marginTop: 20 }} />
+        <Pressable
+          style={{ backgroundColor: theme.accent, marginTop: 24, paddingHorizontal: 28, paddingVertical: 12, borderRadius: 10 }}
+          onPress={async () => {
+            const success = await unlockVault();
+            if (success) {
+              perfTimings.current.authSuccessTime = performance.now();
+            }
+          }}
+        >
+          <Text style={{ color: '#FFFFFF', fontWeight: '600', fontSize: 16 }}>Unlock Vault</Text>
+        </Pressable>
       </View>
     );
   }
@@ -285,7 +314,8 @@ export default function PrivateVaultScreen() {
             style={styles.photo} 
             contentFit="cover"
             cachePolicy="memory-disk"
-            transition={0}
+            priority="high"
+            transition={100}
             onLoad={() => {
               // Instrument Timing 4: First item rendered to thumbnail loaded
               if (index === 0 && perfTimings.current.thumbnailLoadedTime === 0) {

@@ -62,7 +62,6 @@ const PhotoThumbnail = ({
   
   const isSelectionMode = useSelectionStore(state => state.isSelectionMode && state.selectionContext === 'media');
   const isSelected = useSelectionStore(state => state.isSelected(item.id));
-  const isLongPressActiveRef = useRef(false);
   const isNavigatingRef = useRef(false);
 
   // Loading & error state for thumbnail image
@@ -82,12 +81,6 @@ const PhotoThumbnail = ({
   const durationText = useMemo(() => formatVideoDuration(item.duration), [item.duration]);
 
   const handlePress = () => {
-    // If a long press was triggered, consume and reset
-    if (isLongPressActiveRef.current) {
-      isLongPressActiveRef.current = false;
-      return;
-    }
-
     const selectionState = useSelectionStore.getState();
     const inSelectionMode = selectionState.isSelectionMode && selectionState.selectionContext === 'media';
 
@@ -116,21 +109,11 @@ const PhotoThumbnail = ({
   };
 
   const handleLongPress = () => {
-    isLongPressActiveRef.current = true;
     const selectionState = useSelectionStore.getState();
     if (!selectionState.isSelectionMode || selectionState.selectionContext !== 'media') {
       const scopeId = albumId ? `album:${albumId}` : smartAlbumId ? `smart:${smartAlbumId}` : 'gallery';
       const ids = (allIds && allIds.length > 0) ? allIds : selectionState.availableIds;
       selectionState.enterSelectionMode('media', item.id, ids, scopeId);
-    }
-  };
-
-  const handlePressOut = () => {
-    if (isLongPressActiveRef.current) {
-      // Reset long press flag shortly after finger lift so future taps are immediate
-      setTimeout(() => {
-        isLongPressActiveRef.current = false;
-      }, 50);
     }
   };
 
@@ -148,7 +131,6 @@ const PhotoThumbnail = ({
       ]}
       onPress={handlePress}
       onLongPress={handleLongPress}
-      onPressOut={handlePressOut}
       delayLongPress={500}
     >
       {/* 1. Stable Placeholder Layer (rendered behind Image) */}
