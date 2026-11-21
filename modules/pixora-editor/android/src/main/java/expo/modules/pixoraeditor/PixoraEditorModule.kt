@@ -312,7 +312,7 @@ class PixoraEditorModule : Module() {
             context.grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
           }
         }
-      } catch (_: Exception) {
+      } catch (e: Exception) {
         // Chooser and clipData will grant permission to the selected recipient
       }
 

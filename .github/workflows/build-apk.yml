@@ -42,16 +42,20 @@ jobs:
           MYAPP_UPLOAD_STORE_PASSWORD: password
           MYAPP_UPLOAD_KEY_ALIAS: my-key-alias
           MYAPP_UPLOAD_KEY_PASSWORD: password
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=512m"
+          NODE_OPTIONS: "--max-old-space-size=3072"
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --stacktrace
 
       - name: 🔨 Build Android Dev APK
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=512m"
+          NODE_OPTIONS: "--max-old-space-size=3072"
         run: |
           cd android
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace
 
       - name: 🚀 Upload Release APK
         uses: actions/upload-artifact@v4
